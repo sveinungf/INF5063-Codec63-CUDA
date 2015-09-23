@@ -1,0 +1,11 @@
+# object files
+c63enc
+c63dec
+c63pred
+*.o
+
+# data files
+*.c63
+/gmon.out
+
+*.pyc

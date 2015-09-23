@@ -26,6 +26,13 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
+// Get CPU cycle count
+uint64_t rdtsc(){
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
 static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 {
@@ -245,6 +252,10 @@ int main(int argc, char **argv)
   /* Encode input frames */
   int numframes = 0;
 
+# ifdef SHOW_CYCLES
+  uint64_t kCycleCountTotal = 0;
+# endif
+
   while (1)
   {
     image = read_yuv(infile, cm);
@@ -252,7 +263,18 @@ int main(int argc, char **argv)
     if (!image) { break; }
 
     printf("Encoding frame %d, ", numframes);
+
+# ifdef SHOW_CYCLES
+    uint64_t cycleCountBefore = rdtsc();
     c63_encode_image(cm, image);
+    uint64_t cycleCountAfter = rdtsc();
+
+    uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
+    kCycleCountTotal += kCycleCount;
+    printf("%" PRIu64 "k cycles, ", kCycleCount);
+# else
+    c63_encode_image(cm, image);
+# endif
 
     free(image->Y);
     free(image->U);
@@ -266,19 +288,13 @@ int main(int argc, char **argv)
     if (limit_numframes && numframes >= limit_numframes) { break; }
   }
 
+# ifdef SHOW_CYCLES
+  printf("-----------\n");
+  printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
+# endif
+
   fclose(outfile);
   fclose(infile);
-
-  //int i, j;
-  //for (i = 0; i < 2; ++i)
-  //{
-  //  printf("int freq[] = {");
-  //  for (j = 0; j < ARRAY_SIZE(frequencies[i]); ++j)
-  //  {
-  //    printf("%d, ", frequencies[i][j]);
-  //  }
-  //  printf("};\n");
-  //}
 
   return EXIT_SUCCESS;
 }
