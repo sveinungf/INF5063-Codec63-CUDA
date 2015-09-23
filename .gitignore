@@ -1,5 +1,5 @@
 # object files
-c63enc
+#c63enc
 c63dec
 c63pred
 *.o
