@@ -19,7 +19,7 @@ __global__ void gpu_transpose_block(float *in_data, float *out_data)
 	}
 }
 
-static void transpose_block(float *in_data, float *out_data)
+__host__ void transpose_block(float *in_data, float *out_data)
 {
 	float *gpu_in;
 	cudaMalloc(&gpu_in, 64);
