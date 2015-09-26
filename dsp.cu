@@ -22,13 +22,13 @@ __global__ void gpu_transpose_block(float *in_data, float *out_data)
 static void transpose_block(float *in_data, float *out_data)
 {
 	float *gpu_in, *gpu_out;
-	cudaMalloc(&gpu_in, 64)
-	cudaMalloc(&gpu_out, 64)
+	cudaMalloc(&gpu_in, 64);
+	cudaMalloc(&gpu_out, 64);
 	
 	cudaMemcpy(gpu_in, in_data, 64, cudaMemcpyHostToDevice); 
 	cudaMemcpy(gpu_out, out_data, 64, cudaMemcpyHostToDevice); 
 
-	gpu_transpose_block<<<1, 8>>>(gpu_in, gpu_out;
+	gpu_transpose_block<<<1, 8>>>(gpu_in, gpu_out);
 	
 	cudaMemcpy(gpu_out, out_data, 64, cudaMemcpyDeviceToHost); 
 	
