@@ -14,6 +14,8 @@
 #include "me.h"
 #include "tables.h"
 
+#include "dsp.h"
+
 static char *output_file, *input_file;
 FILE *outfile;
 
@@ -233,6 +235,8 @@ int main(int argc, char **argv)
     perror("fopen");
     exit(EXIT_FAILURE);
   }
+  
+  cuda_init();
 
   struct c63_common *cm = init_c63_enc(width, height);
   cm->e_ctx.fp = outfile;
@@ -295,6 +299,8 @@ int main(int argc, char **argv)
 
   fclose(outfile);
   fclose(infile);
+  
+  cuda_cleanup();
 
   return EXIT_SUCCESS;
 }
