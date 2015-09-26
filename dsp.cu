@@ -7,6 +7,19 @@ extern "C" {
 #include "tables.h"
 }
 
+__constant__ float dct_lookup[64] =
+{
+  1.0f,  0.980785f,  0.923880f,  0.831470f,  0.707107f,  0.555570f,  0.382683f,  0.195090f,
+  1.0f,  0.831470f,  0.382683f, -0.195090f, -0.707107f, -0.980785f, -0.923880f, -0.555570f,
+  1.0f,  0.555570f, -0.382683f, -0.980785f, -0.707107f,  0.195090f,  0.923880f,  0.831470f,
+  1.0f,  0.195090f, -0.923880f, -0.555570f,  0.707107f,  0.831470f, -0.382683f, -0.980785f,
+  1.0f, -0.195090f, -0.923880f,  0.555570f,  0.707107f, -0.831470f, -0.382683f,  0.980785f,
+  1.0f, -0.555570f, -0.382683f,  0.980785f, -0.707107f, -0.195090f,  0.923880f, -0.831470f,
+  1.0f, -0.831470f,  0.382683f,  0.195090f, -0.707107f,  0.980785f, -0.923880f,  0.555570f,
+  1.0f, -0.980785f,  0.923880f, -0.831470f,  0.707107f, -0.555570f,  0.382683f, -0.195090f
+};
+
+
 static float *gpu_in, *gpu_out;
 
 __host__ void cuda_init() {
@@ -34,13 +47,8 @@ __global__ void gpu_transpose_block(float *in_data, float *out_data)
 
 __host__ void transpose_block(float *in_data, float *out_data)
 {
-	
-	cudaMemcpy(gpu_in, in_data, 64*sizeof(float), cudaMemcpyHostToDevice); 
-	cudaMemcpy(gpu_out, out_data, 64*sizeof(float), cudaMemcpyHostToDevice); 
-
 	gpu_transpose_block<<<1, 8>>>(gpu_in, gpu_out);
 	
-	cudaMemcpy(out_data, gpu_out, 64*sizeof(float), cudaMemcpyDeviceToHost);
 	
 	
 	/*
@@ -105,6 +113,21 @@ static void dct_1d(float *in_data, float *out_data)
 	}
 }
 
+__global__ void gpu_dct_1d(float *in_data, float *out_data)
+{
+	int i, j;
+	i = threadIdx.x;
+	
+	float dct = 0;
+
+	for (j = 0; j < 8; ++j)
+	{
+		dct += in_data[j] * dct_lookup[j*8+i];
+	}
+
+	out_data[i] = dct;	
+}
+
 static void idct_1d(float *in_data, float *out_data)
 {
 	int i, j;
@@ -121,6 +144,22 @@ static void idct_1d(float *in_data, float *out_data)
 		out_data[i] = idct;
 	}
 }
+
+__global__ void gpu_idct_1d(float *in_data, float *out_data)
+{
+	int i, j;
+	i = threadIdx.x;
+		
+	float idct = 0;
+
+	for (j = 0; j < 8; ++j)
+	{
+			idct += in_data[j] * dct_lookup[i*8+j];
+	}
+
+	out_data[i] = idct;	
+}
+
 
 static void scale_block(float *in_data, float *out_data)
 {
@@ -171,29 +210,39 @@ static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl
 	}
 }
 
-void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+__host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
 	float mb[8 * 8] __attribute((aligned(16)));
 	float mb2[8 * 8] __attribute((aligned(16)));
 
 	int i, v;
 
-	for (i = 0; i < 64; ++i)
+	/*for (i = 0; i < 64; ++i)
 	{
 		mb2[i] = in_data[i];
 	}
+	*/
+	
+	cudaMemcpy(gpu_in, in_data, 64*sizeof(float), cudaMemcpyHostToDevice); 
 
 	/* Two 1D DCT operations with transpose */
 	for (v = 0; v < 8; ++v)
 	{
-		dct_1d(mb2 + v * 8, mb + v * 8);
+		//dct_1d(mb2 + v * 8, mb + v * 8);
+		gpu_dct_1d<<<1, 8>>>(gpu_out, gpu_in);
 	}
-	transpose_block(mb, mb2);
+	//transpose_block(mb, mb2);
+	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	for (v = 0; v < 8; ++v)
 	{
-		dct_1d(mb2 + v * 8, mb + v * 8);
+		//dct_1d(mb2 + v * 8, mb + v * 8);
+		gpu_dct_1d<<<1, 8>>>(gpu_out, gpu_in);
 	}
-	transpose_block(mb, mb2);
+	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
+	//transpose_block(mb, mb2);
+	
+	cudaMemcpy((float*)&mb2, gpu_in, 64*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy((float*)&mb, gpu_out, 64*sizeof(float), cudaMemcpyDeviceToHost);
 
 	scale_block(mb2, mb);
 	quantize_block(mb, mb2, quant_tbl);
@@ -204,7 +253,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl
 	}
 }
 
-void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+__host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
 	float mb[8 * 8] __attribute((aligned(16)));
 	float mb2[8 * 8] __attribute((aligned(16)));
@@ -218,23 +267,34 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_
 
 	dequantize_block(mb, mb2, quant_tbl);
 	scale_block(mb2, mb);
+	
+	cudaMemcpy(gpu_in, (float*)&mb, 64*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy(gpu_out, (float*)&mb2, 64*sizeof(float), cudaMemcpyHostToDevice); 
 
 	/* Two 1D inverse DCT operations with transpose */
 	for (v = 0; v < 8; ++v)
 	{
-		idct_1d(mb + v * 8, mb2 + v * 8);
+		//idct_1d(mb + v * 8, mb2 + v * 8);
+		gpu_idct_1d<<<1, 8>>>(gpu_in, gpu_out);
 	}
-	transpose_block(mb2, mb);
+	//transpose_block(mb2, mb);
+	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	for (v = 0; v < 8; ++v)
 	{
-		idct_1d(mb + v * 8, mb2 + v * 8);
+		//idct_1d(mb + v * 8, mb2 + v * 8);
+		gpu_idct_1d<<<1, 8>>>(gpu_in, gpu_out);
 	}
-	transpose_block(mb2, mb);
+	//transpose_block(mb2, mb);
+	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 
+	
+	/*
 	for (i = 0; i < 64; ++i)
 	{
 		out_data[i] = mb[i];
 	}
+	* */
+	cudaMemcpy(out_data, gpu_in, 64*sizeof(float), cudaMemcpyDeviceToHost);
 }
 
 void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
