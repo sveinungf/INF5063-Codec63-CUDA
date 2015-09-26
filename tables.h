@@ -3,6 +3,7 @@
 
 #include <inttypes.h>
 #include <cuda_runtime.h>
+#include <cuda.h>
 
 extern uint8_t yquanttbl_def[64] __attribute__((aligned(16)));
 extern uint8_t uvquanttbl_def[64] __attribute__((aligned(16)));
