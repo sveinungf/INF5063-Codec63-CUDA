@@ -229,14 +229,14 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 	for (v = 0; v < 8; ++v)
 	{
 		//dct_1d(mb2 + v * 8, mb + v * 8);
-		gpu_dct_1d<<<1, 8>>>(gpu_in, gpu_out);
+		gpu_dct_1d<<<1, 8>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	//transpose_block(mb, mb2);
 	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	for (v = 0; v < 8; ++v)
 	{
 		//dct_1d(mb2 + v * 8, mb + v * 8);
-		gpu_dct_1d<<<1, 8>>>(gpu_in, gpu_out);
+		gpu_dct_1d<<<1, 8>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	//transpose_block(mb, mb2);
@@ -275,14 +275,14 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	for (v = 0; v < 8; ++v)
 	{
 		//idct_1d(mb + v * 8, mb2 + v * 8);
-		gpu_idct_1d<<<1, 8>>>(gpu_in, gpu_out);
+		gpu_idct_1d<<<1, 8>>>(gpu_i + v * 8, gpu_out + v * 8);
 	}
 	//transpose_block(mb2, mb);
 	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	for (v = 0; v < 8; ++v)
 	{
 		//idct_1d(mb + v * 8, mb2 + v * 8);
-		gpu_idct_1d<<<1, 8>>>(gpu_in, gpu_out);
+		gpu_idct_1d<<<1, 8>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	//transpose_block(mb2, mb);
 	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
