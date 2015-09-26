@@ -17,7 +17,7 @@
 static char *output_file, *input_file;
 FILE *outfile;
 
-static int limit_numframes = 0;
+static int limit_numframes = 30;
 
 static uint32_t width;
 static uint32_t height;

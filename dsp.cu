@@ -7,9 +7,22 @@ extern "C" {
 #include "tables.h"
 }
 
-static void transpose_block(float *in_data, float *out_data)
+
+__global__ void gpu_transpose_block(float *in_data, float *out_data) 
+{
+	
+    int i = threadIdx.x;
+    
+    int j;
+    for(j = 0; j < 8; j++) {	
+		out_data[i * 8 + j] = in_data[j * 8 +i];
+	}
+}
+
+__host__ void transpose_block(float *in_data, float *out_data)
 {
 	int i, j;
+	
 
 	for (i = 0; i < 8; ++i)
 	{
@@ -20,7 +33,7 @@ static void transpose_block(float *in_data, float *out_data)
 	}
 }
 
-static void dct_1d(float *in_data, float *out_data)
+__host__ void dct_1d(float *in_data, float *out_data)
 {
 	int i, j;
 
@@ -30,7 +43,7 @@ static void dct_1d(float *in_data, float *out_data)
 
 		for (j = 0; j < 8; ++j)
 		{
-			dct += in_data[j] * dctlookup[j][i];
+			dct += in_data[j] * dctlookup[j*8+i];
 		}
 
 		out_data[i] = dct;
@@ -47,7 +60,7 @@ static void idct_1d(float *in_data, float *out_data)
 
 		for (j = 0; j < 8; ++j)
 		{
-			idct += in_data[j] * dctlookup[i][j];
+			idct += in_data[j] * dctlookup[i*8+j];
 		}
 
 		out_data[i] = idct;

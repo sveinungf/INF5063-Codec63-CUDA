@@ -2,6 +2,7 @@
 #define C63_TABLES_H_
 
 #include <inttypes.h>
+#include <cuda_runtime.h>
 
 extern uint8_t yquanttbl_def[64] __attribute__((aligned(16)));
 extern uint8_t uvquanttbl_def[64] __attribute__((aligned(16)));
@@ -15,8 +16,13 @@ extern uint8_t ACVLC_num_by_length[2][16];
 extern uint8_t ACVLC_data[2][162];
 extern uint8_t zigzag_U[64];
 extern uint8_t zigzag_V[64];
-extern float dctlookup[8][8];
+extern uint8_t UV_indexes[64];
+extern float dctlookup[64];
+extern float dctlookup_trans[64];
 extern uint16_t MVVLC[8];
 extern uint8_t MVVLC_Size[8];
+
+extern __constant__ float quanttbl_gpu[192];
+
 
 #endif  /* C63_TABLES_H_ */

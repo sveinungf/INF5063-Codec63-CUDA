@@ -1,5 +1,5 @@
-CC = gcc
-NVCC = nvcc -lineinfo
+CC = nvcc -lineinfo
+#NVCC = nvcc -lineinfo
 CFLAGS = -O3 -pg #-Wall -pg -DSHOW_CYCLES
 LDFLAGS = -lm
 
@@ -9,14 +9,14 @@ all: c63enc #c63dec c63pred
 	$(CC) $< $(CFLAGS) -c -o $@
 	
 %.o: %.cu
-	$(NVCC) $< $(CFLAGS) -c -o $@
+	$(CC) $< $(CFLAGS) -c -o $@
 
 c63enc: c63enc.o dsp.o tables.o io.o c63_write.o common.o me.o
-	$(NVCC) $^ $(CFLAGS) $(LDFLAGS) -o $@
+	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
 c63dec: c63dec.c dsp.o tables.o io.o common.o me.o
-	$(NVCC) $^ $(CFLAGS) $(LDFLAGS) -o $@
+	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
 c63pred: c63dec.c dsp.o tables.o io.o common.o me.o
-	$(NVCC) $^ -DC63_PRED $(CFLAGS) $(LDFLAGS) -o $@
+	$(CC) $^ -DC63_PRED $(CFLAGS) $(LDFLAGS) -o $@
 
 clean:
 	rm -f *.o c63enc temp/* yuv/test.yuv #c63dec c63pred

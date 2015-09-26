@@ -5,6 +5,8 @@
 
 #include <inttypes.h>
 
+#include <cuda_runtime.h>
+
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
     uint8_t *quant_tbl);
 
