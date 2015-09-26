@@ -30,7 +30,7 @@ static void transpose_block(float *in_data, float *out_data)
 
 	gpu_transpose_block<<<1, 8>>>(gpu_in, gpu_out);
 	
-	cudaMemcpy(gpu_out, out_data, 64, cudaMemcpyDeviceToHost); 
+	cudaMemcpy(out_data, gpu_out, 64, cudaMemcpyDeviceToHost); 
 	
 	cudaFree(gpu_in);
 	cudaFree(gpu_out);
