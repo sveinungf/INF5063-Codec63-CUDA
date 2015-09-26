@@ -21,7 +21,50 @@ __global__ void gpu_transpose_block(float *in_data, float *out_data)
 
 static void transpose_block(float *in_data, float *out_data)
 {
-	gpu_transpose_block<<<1, 8>>>(in_data, out_data);
+	float *gpu_in, *gpu_out;
+	cudaMalloc(&gpu_in, 64)
+	cudaMalloc(&gpu_out, 64)
+	
+	cudaMemcpy(gpu_in, in_data, 64, cudaMemcpyHostToDevice); 
+	cudaMemcpy(gpu_out, out_data, 64, cudaMemcpyHostToDevice); 
+
+	gpu_transpose_block<<<1, 8>>>(gpu_in, gpu_out;
+	
+	cudaMemcpy(gpu_out, out_data, 64, cudaMemcpyDeviceToHost); 
+	
+	cudaFree(gpu_in);
+	cudaFree(gpu_out);
+	
+	
+	/*
+	 * 
+	 * float* d_A; 
+	 * cudaMalloc(&d_A, size);
+	 * 
+	 * float* d_B; 
+	 * cudaMalloc(&d_B, size); 
+	 * 
+	 * float* d_C; 
+	 * cudaMalloc(&d_C, size); 
+	 * 
+	 * // Copy vectors from host memory to device memory 
+	 * cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice); 
+	 * cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice); 
+	 * 
+	 * // Invoke kernel 
+	 * int threadsPerBlock = 256; 
+	 * int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock; 
+	 * VecAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N); 
+	 * 
+	 * // Copy result from device memory to host memory 
+	 * // h_C contains the result in host memory 
+	 * cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost); 
+	 * 
+	 * // Free device memory 
+	 * cudaFree(d_A); 
+	 * cudaFree(d_B); 
+	 * cudaFree(d_C);
+*/
 	
 	/*
 	int i, j;
