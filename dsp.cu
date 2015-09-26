@@ -21,6 +21,10 @@ __global__ void gpu_transpose_block(float *in_data, float *out_data)
 
 __host__ void transpose_block(float *in_data, float *out_data)
 {
+	gpu_transpose_block<<<1, 8>>>(in_data, out_data);
+
+	
+	/*
 	int i, j;
 	
 
@@ -31,6 +35,7 @@ __host__ void transpose_block(float *in_data, float *out_data)
 			out_data[i * 8 + j] = in_data[j * 8 + i];
 		}
 	}
+	* */
 }
 
 __host__ void dct_1d(float *in_data, float *out_data)
