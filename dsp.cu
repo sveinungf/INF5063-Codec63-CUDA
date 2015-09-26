@@ -154,7 +154,7 @@ __global__ void gpu_idct_1d(float *in_data, float *out_data)
 
 	for (j = 0; j < 8; ++j)
 	{
-			idct += in_data[j] * dct_lookup[i*8+j];
+		idct += in_data[j] * dct_lookup[i*8+j];
 	}
 
 	out_data[i] = idct;	
@@ -229,14 +229,14 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 	for (v = 0; v < 8; ++v)
 	{
 		//dct_1d(mb2 + v * 8, mb + v * 8);
-		gpu_dct_1d<<<1, 8>>>(gpu_out, gpu_in);
+		gpu_dct_1d<<<1, 8>>>(gpu_in, gpu_out);
 	}
 	//transpose_block(mb, mb2);
 	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	for (v = 0; v < 8; ++v)
 	{
 		//dct_1d(mb2 + v * 8, mb + v * 8);
-		gpu_dct_1d<<<1, 8>>>(gpu_out, gpu_in);
+		gpu_dct_1d<<<1, 8>>>(gpu_in, gpu_out);
 	}
 	gpu_transpose_block<<<1, 8>>>(gpu_out, gpu_in);
 	//transpose_block(mb, mb2);
