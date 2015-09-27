@@ -1,3 +1,4 @@
+extern "C" {
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
@@ -11,8 +12,11 @@
 #include "c63.h"
 #include "c63_write.h"
 #include "common.h"
-#include "me.h"
 #include "tables.h"
+}
+
+#include "me.h"
+
 
 static char *output_file, *input_file;
 FILE *outfile;
@@ -37,20 +41,20 @@ uint64_t rdtsc(){
 static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 {
   size_t len = 0;
-  yuv_t *image = malloc(sizeof(*image));
+  yuv_t *image = (yuv_t*) malloc(sizeof(*image));
 
   /* Read Y. The size of Y is the same as the size of the image. The indices
      represents the color component (0 is Y, 1 is U, and 2 is V) */
-  image->Y = calloc(1, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]);
+  image->Y = (uint8_t*) calloc(1, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]);
   len += fread(image->Y, 1, width*height, file);
 
   /* Read U. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y
      because (height/2)*(width/2) = (height*width)/4. */
-  image->U = calloc(1, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]);
+  image->U = (uint8_t*) calloc(1, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]);
   len += fread(image->U, 1, (width*height)/4, file);
 
   /* Read V. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y. */
-  image->V = calloc(1, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]);
+  image->V = (uint8_t*) calloc(1, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]);
   len += fread(image->V, 1, (width*height)/4, file);
 
   if (ferror(file))
@@ -145,7 +149,7 @@ struct c63_common* init_c63_enc(int width, int height)
   int i;
 
   /* calloc() sets allocated memory to zero */
-  struct c63_common *cm = calloc(1, sizeof(struct c63_common));
+  struct c63_common *cm = (c63_common*) calloc(1, sizeof(struct c63_common));
 
   cm->width = width;
   cm->height = height;

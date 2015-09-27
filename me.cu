@@ -1,3 +1,4 @@
+extern "C" {
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
@@ -8,10 +9,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern "C" {
 #include "dsp.h"
-#include "me.h"
 }
+
+#include "me.h"
+
 
 /* Motion estimation for 8x8 block */
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig, uint8_t *ref, int color_component)
