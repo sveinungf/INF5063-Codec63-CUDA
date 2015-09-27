@@ -2,8 +2,12 @@
 c63enc
 *.o
 
-# data files
-*.c63
-/gmon.out
-
+gmon.out
 *.pyc
+
+# eclipse
+/.ptp-sync/
+.settings/
+.cproject
+.project
+.ptp-sync-folder
