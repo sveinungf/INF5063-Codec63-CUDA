@@ -15,62 +15,39 @@ extern "C" {
 
 
 __global__
-void pixel_sad(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int* pixel_sads)
+void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, int stride)
 {
-	uint8_t* ref_block = ref_search_range + blockIdx.y*stride + blockIdx.x;
-
 	int i = threadIdx.x;
 	int j = threadIdx.y;
-	pixel_sads[blockIdx.y*gridDim.x*64 + blockIdx.x*64 + i*8 + j] = abs(ref_block[i*stride + j] - orig_block[i*stride + j]);
-}
 
-__global__
-void block_sad(int* pixel_sads, int* block_sads)
-{
-	int i = threadIdx.x;
-	int* block_pixel_sads = pixel_sads + blockIdx.y*gridDim.x*64 + blockIdx.x*64;
+	__shared__ uint8_t shared_orig_block[8][8];
 
-	__shared__ int shared_sads[32];
-	shared_sads[i] = block_pixel_sads[i] + block_pixel_sads[i + 32];
-
-	__syncthreads();
-
-	if (i < 16) {
-		shared_sads[i] += shared_sads[i + 16];
+	if (i < 8 && j < 8)
+	{
+		shared_orig_block[i][j] = orig_block[i*stride + j];
 	}
 
 	__syncthreads();
 
-	if (i < 8) {
-		shared_sads[i] += shared_sads[i + 8];
+	uint8_t* ref_block = ref_search_range + j*stride + i;
+	int result = 0;
+
+	for (int y = 0; y < 8; ++y)
+	{
+		for (int x = 0; x < 8; ++x)
+		{
+			result += abs(ref_block[y*stride + x] - shared_orig_block[y][x]);
+		}
 	}
 
-	__syncthreads();
-
-	if (i < 4) {
-		shared_sads[i] += shared_sads[i + 4];
-	}
-
-	__syncthreads();
-
-	if (i < 2) {
-		shared_sads[i] += shared_sads[i + 2];
-	}
-
-	__syncthreads();
-
-	if (i == 0) {
-		block_sads[blockIdx.y*gridDim.x + blockIdx.x] = shared_sads[0] + shared_sads[1];
-	}
+	block_sads[j*blockDim.x + i] = result;
 }
 
 static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
 {
-	dim3 numBlocks(range_width, range_height);
-	dim3 threadsPerBlock(8, 8);
-	pixel_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, stride, pixel_sads_gpu);
-
-	block_sad<<<numBlocks, 32>>>(pixel_sads_gpu, block_sads_gpu);
+	int numBlocks = 1;
+	dim3 threadsPerBlock(range_width, range_height);
+	block_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, block_sads_gpu, stride);
 
 	const int block_sads_size = range_width * range_height * sizeof(int);
 	cudaMemcpy(block_sads, block_sads_gpu, block_sads_size, cudaMemcpyDeviceToHost);
