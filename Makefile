@@ -9,7 +9,7 @@ DEBUG ?= 0
 
 ifeq ($(DEBUG),1)
 	CCFLAGS += -Og -g -pg -DSHOW_CYCLES
-	NVCCFLAGS = -G -lineinfo
+	NVCCFLAGS += -G -lineinfo
 else
 	CCFLAGS += -O3
 endif
