@@ -212,8 +212,8 @@ static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl
 
 __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
-	float mb[8 * 8] __attribute((aligned(16)));
-	float mb2[8 * 8] __attribute((aligned(16)));
+	float mb[8 * 8] __attribute((aligned(32)));
+	float mb2[8 * 8] __attribute((aligned(32)));
 
 	int i, v;
 
@@ -255,8 +255,8 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 
 __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
-	float mb[8 * 8] __attribute((aligned(16)));
-	float mb2[8 * 8] __attribute((aligned(16)));
+	float mb[8 * 8] __attribute((aligned(32)));
+	float mb2[8 * 8] __attribute((aligned(32)));
 
 	int i, v;
 
