@@ -39,8 +39,8 @@ __host__ void cuda_cleanup() {
 __global__ void gpu_transpose_block(float *in_data, float *out_data) 
 {
 	
-    int i = threadIdx.x;
-    int j = threadIdx.y;
+    int i = threadIdx.y;
+    int j = threadIdx.x;
     out_data[i * 8 + j] = in_data[j * 8 + i];
     /*
     int j;
@@ -122,8 +122,8 @@ static void dct_1d(float *in_data, float *out_data)
 __global__ void gpu_dct_1d(float *in_data, float *out_data)
 {
 	
-	int i = threadIdx.x;
-	int j = threadIdx.y;
+	int i = threadIdx.y;
+	int j = threadIdx.x;
 	
 	out_data[i] += in_data[j] * dct_lookup[j*8+i];
 	
