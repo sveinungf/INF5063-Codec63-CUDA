@@ -15,8 +15,69 @@ extern "C" {
 #include "me.h"
 
 
+__global__
+void pixel_sad(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int* pixel_sads)
+{
+	uint8_t* ref_block = ref_search_range + blockIdx.y*stride + blockIdx.x;
+
+	int i = threadIdx.x;
+	int j = threadIdx.y;
+	pixel_sads[blockIdx.y*gridDim.x*64 + blockIdx.x*64 + i*8 + j] = abs(ref_block[i*stride + j] - orig_block[i*stride + j]);
+}
+
+__global__
+void block_sad(int* pixel_sads, int* block_sads)
+{
+	int i = threadIdx.x;
+	int* block_pixel_sads = pixel_sads + blockIdx.y*gridDim.x*64 + blockIdx.x*64;
+
+	block_pixel_sads[i] += block_pixel_sads[i + 32];
+
+	__syncthreads();
+
+	if (i < 16) {
+		block_pixel_sads[i] += block_pixel_sads[i + 16];
+	}
+
+	__syncthreads();
+
+	if (i < 8) {
+		block_pixel_sads[i] += block_pixel_sads[i + 8];
+	}
+
+	__syncthreads();
+
+	if (i < 4) {
+		block_pixel_sads[i] += block_pixel_sads[i + 4];
+	}
+
+	__syncthreads();
+
+	if (i < 2) {
+		block_pixel_sads[i] += block_pixel_sads[i + 2];
+	}
+
+	__syncthreads();
+
+	if (i == 0) {
+		block_sads[blockIdx.y*gridDim.x + blockIdx.x] = block_pixel_sads[0] + block_pixel_sads[1];
+	}
+}
+
+static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
+{
+	dim3 numBlocks(range_width, range_height);
+	dim3 threadsPerBlock(8, 8);
+	pixel_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, stride, pixel_sads_gpu);
+
+	block_sad<<<numBlocks, 32>>>(pixel_sads_gpu, block_sads_gpu);
+
+	const int block_sads_size = range_width * range_height * sizeof(int);
+	cudaMemcpy(block_sads, block_sads_gpu, block_sads_size, cudaMemcpyDeviceToHost);
+}
+
 /* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig, uint8_t *ref, int color_component)
+static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
 {
 	struct macroblock *mb = &cm->curframe->mbs[color_component][mb_y * cm->padw[color_component] / 8 + mb_x];
 
@@ -55,26 +116,30 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 		bottom = h - 8;
 	}
 
-	int x, y;
-
 	int mx = mb_x * 8;
 	int my = mb_y * 8;
 
 	int best_sad = INT_MAX;
 
-	for (y = top; y < bottom; ++y)
-	{
-		for (x = left; x < right; ++x)
-		{
-			int sad;
-			sad_block_8x8(orig + my * w + mx, ref + y * w + x, w, &sad);
+	int range_width = right - left;
+	int range_height = bottom - top;
 
-			/* printf("(%4d,%4d) - %d\n", x, y, sad); */
+	uint8_t* orig_block_gpu = orig_gpu + my * w + mx;
+	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
+	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, block_sads);
+
+	int p;
+	for (p = 0; p < range_height; ++p)
+	{
+		int q;
+		for (q = 0; q < range_width; ++q)
+		{
+			int sad = block_sads[p*range_width + q];
 
 			if (sad < best_sad)
 			{
-				mb->mv_x = x - mx;
-				mb->mv_y = y - my;
+				mb->mv_x = left + q - mx;
+				mb->mv_y = top + p - my;
 				best_sad = sad;
 			}
 		}
@@ -82,9 +147,6 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 
 	/* Here, there should be a threshold on SAD that checks if the motion vector
 	 is cheaper than intraprediction. We always assume MV to be beneficial */
-
-	/* printf("Using motion vector (%d, %d) with SAD %d\n", mb->mv_x, mb->mv_y,
-	 best_sad); */
 
 	mb->use_mv = 1;
 }
@@ -94,12 +156,48 @@ void c63_motion_estimate(struct c63_common *cm)
 	/* Compare this frame with previous reconstructed frame */
 	int mb_x, mb_y;
 
+	uint8_t *origY_gpu, *origU_gpu, *origV_gpu;
+	uint8_t *refY_gpu, *refU_gpu, *refV_gpu;
+	int* pixel_sads_gpu;
+	int* block_sads_gpu;
+	int* block_sads;
+
+	const int range = cm->me_search_range;
+	const int max_range_width = 2 * range;
+	const int max_range_height = 2 * range;
+	const int pixel_sads_size = max_range_width * max_range_height * 64 * sizeof(int); // dat memory tho
+	const int block_sads_size = max_range_width * max_range_height * sizeof(int);
+
+	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
+	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
+	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
+
+	cudaMalloc((void**) &pixel_sads_gpu, pixel_sads_size);
+	cudaMalloc((void**) &block_sads_gpu, block_sads_size);
+	block_sads = (int*) malloc(max_range_width * max_range_height * sizeof(int));
+
+	cudaMalloc((void**) &origY_gpu, frame_size_Y);
+	cudaMalloc((void**) &origU_gpu, frame_size_U);
+	cudaMalloc((void**) &origV_gpu, frame_size_V);
+
+	cudaMalloc((void**) &refY_gpu, frame_size_Y);
+	cudaMalloc((void**) &refU_gpu, frame_size_U);
+	cudaMalloc((void**) &refV_gpu, frame_size_V);
+
+	cudaMemcpy(origY_gpu, cm->curframe->orig->Y, frame_size_Y, cudaMemcpyHostToDevice);
+	cudaMemcpy(origU_gpu, cm->curframe->orig->U, frame_size_U, cudaMemcpyHostToDevice);
+	cudaMemcpy(origV_gpu, cm->curframe->orig->V, frame_size_V, cudaMemcpyHostToDevice);
+
+	cudaMemcpy(refY_gpu, cm->refframe->recons->Y, frame_size_Y, cudaMemcpyHostToDevice);
+	cudaMemcpy(refU_gpu, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
+	cudaMemcpy(refV_gpu, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
+
 	/* Luma */
 	for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->Y, cm->refframe->recons->Y, Y_COMPONENT);
+			me_block_8x8(cm, mb_x, mb_y, origY_gpu, refY_gpu, Y_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
 		}
 	}
 
@@ -108,10 +206,22 @@ void c63_motion_estimate(struct c63_common *cm)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->U, cm->refframe->recons->U, U_COMPONENT);
-			me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->V, cm->refframe->recons->V, V_COMPONENT);
+			me_block_8x8(cm, mb_x, mb_y, origU_gpu, refU_gpu, U_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, origV_gpu, refV_gpu, V_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
 		}
 	}
+
+	cudaFree(pixel_sads_gpu);
+	cudaFree(block_sads_gpu);
+	free(block_sads);
+
+	cudaFree(origY_gpu);
+	cudaFree(origU_gpu);
+	cudaFree(origV_gpu);
+
+	cudaFree(refY_gpu);
+	cudaFree(refU_gpu);
+	cudaFree(refV_gpu);
 }
 
 /* Motion compensation for 8x8 block */
