@@ -31,36 +31,37 @@ void block_sad(int* pixel_sads, int* block_sads)
 	int i = threadIdx.x;
 	int* block_pixel_sads = pixel_sads + blockIdx.y*gridDim.x*64 + blockIdx.x*64;
 
-	block_pixel_sads[i] += block_pixel_sads[i + 32];
+	__shared__ int shared_sads[32];
+	shared_sads[i] = block_pixel_sads[i] + block_pixel_sads[i + 32];
 
 	__syncthreads();
 
 	if (i < 16) {
-		block_pixel_sads[i] += block_pixel_sads[i + 16];
+		shared_sads[i] += shared_sads[i + 16];
 	}
 
 	__syncthreads();
 
 	if (i < 8) {
-		block_pixel_sads[i] += block_pixel_sads[i + 8];
+		shared_sads[i] += shared_sads[i + 8];
 	}
 
 	__syncthreads();
 
 	if (i < 4) {
-		block_pixel_sads[i] += block_pixel_sads[i + 4];
+		shared_sads[i] += shared_sads[i + 4];
 	}
 
 	__syncthreads();
 
 	if (i < 2) {
-		block_pixel_sads[i] += block_pixel_sads[i + 2];
+		shared_sads[i] += shared_sads[i + 2];
 	}
 
 	__syncthreads();
 
 	if (i == 0) {
-		block_sads[blockIdx.y*gridDim.x + blockIdx.x] = block_pixel_sads[0] + block_pixel_sads[1];
+		block_sads[blockIdx.y*gridDim.x + blockIdx.x] = shared_sads[0] + shared_sads[1];
 	}
 }
 
