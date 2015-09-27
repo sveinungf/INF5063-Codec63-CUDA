@@ -254,10 +254,10 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 		gpu_dct_1d<<<numBlocks, threadsPerBlock>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	* */
-	gpu_dct_1d<<<numBlocks, threadsPerBlock>>>(gpu_in, gpu_out);
+	gpu_dct_1d<<<numBlocks, 8>>>(gpu_in, gpu_out);
 
 	//transpose_block(mb, mb2);
-	gpu_transpose_block<<<numBlocks, 8>>>(gpu_out, gpu_in);
+	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_out, gpu_in);
 	
 	/*
 	for (v = 0; v < 8; ++v)
