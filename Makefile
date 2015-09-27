@@ -1,25 +1,40 @@
 CC = gcc
-NVCC = nvcc -lineinfo
-CFLAGS = -O3 -pg #-Wall -pg -DSHOW_CYCLES
+NVCC = nvcc
+
+CCFLAGS = -Wall
+NVCCFLAGS = -std=c++11
 LDFLAGS = -lm
+
+DEBUG ?= 0
+
+ifeq ($(DEBUG),1)
+	CCFLAGS += -Og -g -pg -DSHOW_CYCLES
+	NVCCFLAGS = -G -lineinfo
+else
+	CCFLAGS += -O3
+endif
+
+ALL_NVCCFLAGS = $(NVCCFLAGS)
+ALL_NVCCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
+
+ALL_LDFLAGS = $(addprefix -Xlinker ,$(LDFLAGS))
 
 all: c63enc #c63dec c63pred
 
 %.o: %.c
-	$(CC) $< $(CFLAGS) -c -o $@
-	
+	$(CC) $(CCFLAGS) -o $@ -c $<
 %.o: %.cu
-	$(NVCC) $< $(CFLAGS) -c -o $@
+	$(NVCC) $(ALL_NVCCFLAGS) -o $@ -c $<
 
 c63enc: c63enc.o dsp.o tables.o io.o c63_write.o common.o me.o
-	$(NVCC) $^ $(CFLAGS) $(LDFLAGS) -o $@
+	$(NVCC) $(ALL_NVCCFLAGS) $(ALL_LDFLAGS) -o $@ $^
 c63dec: c63dec.c dsp.o tables.o io.o common.o me.o
-	$(NVCC) $^ $(CFLAGS) $(LDFLAGS) -o $@
+	$(NVCC) $(ALL_NVCCFLAGS) $(ALL_LDFLAGS) -o $@ $^
 c63pred: c63dec.c dsp.o tables.o io.o common.o me.o
-	$(NVCC) $^ -DC63_PRED $(CFLAGS) $(LDFLAGS) -o $@
+	$(NVCC) $(ALL_NVCCFLAGS) $(ALL_LDFLAGS) -DC63_PRED -o $@ $^
 
 clean:
-	rm -f *.o c63enc temp/* yuv/test.yuv #c63dec c63pred
+	rm -f *.o c63enc temp/* yuv/test.yuv
 
 encode: c63enc
 	./c63enc -w 352 -h 288 -o temp/test.c63 yuv/foreman.yuv
