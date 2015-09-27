@@ -1,7 +1,5 @@
 # object files
-#c63enc
-c63dec
-c63pred
+c63enc
 *.o
 
 # data files
