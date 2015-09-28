@@ -163,9 +163,10 @@ __global__ void gpu_idct_1d(float *in_data, float *out_data)
 	int i = threadIdx.y;
 	int j = threadIdx.x;
 	float idct = 0;
-	 
-	for (j = 0; j < 8; ++j) {
-		idct += in_data[i*8+j] * dct_lookup[i*8+j];
+	
+	int k;
+	for (k = 0; k < 8; ++k) {
+		idct += in_data[i*8+k] * dct_lookup[i*8+k];
 	}
 	out_data[i*8+j] = idct;
 	
