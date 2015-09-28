@@ -3,6 +3,9 @@
 c63dec
 c63pred
 *.o
+.cproject
+.project
+dsp_old.cu
 
 # data files
 *.c63
