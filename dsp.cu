@@ -121,7 +121,17 @@ static void dct_1d(float *in_data, float *out_data)
 
 __global__ void gpu_dct_1d(float *in_data, float *out_data)
 {
-	int k = threadIdx.x;
+	int i = threadIdx.y;
+	int j = threadIdx.x;
+	float idct = 0;
+	
+	int k;
+	for (k = 0; k < 8; ++k) {
+		idct += in_data[i*8+k] * dct_lookup[k*8+j];
+	}
+	out_data[i*8+j] = idct;
+	
+	/*int k = threadIdx.x;
 	int i, j;
 	
 	for (i = 0; i < 8; ++i) {
@@ -135,7 +145,7 @@ __global__ void gpu_dct_1d(float *in_data, float *out_data)
 		out_data[k*8+i] = dct;
 	}
 	
-	/*int i = threadIdx.x;
+	int i = threadIdx.x;
 	out_data[i/8] += in_data[i/8] * dct_lookup[i];*/
 }
 
