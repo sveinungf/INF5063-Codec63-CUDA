@@ -166,7 +166,7 @@ __global__ void gpu_idct_1d(float *in_data, float *out_data)
 	
 	int k;
 	for (k = 0; k < 8; ++k) {
-		idct += in_data[i*8+k] * dct_lookup[i*8+k];
+		idct += in_data[i*8+k] * dct_lookup[j*8+k];
 	}
 	out_data[i*8+j] = idct;
 	
