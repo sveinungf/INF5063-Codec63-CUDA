@@ -21,11 +21,11 @@ void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, 
 	int i = threadIdx.x;
 	int j = threadIdx.y;
 
-	__shared__ uint8_t shared_orig_block[8][8];
+	__shared__ uint8_t shared_orig_block[64];
 
 	if (i < 8 && j < 8)
 	{
-		shared_orig_block[i][j] = orig_block[i*stride + j];
+		shared_orig_block[i*8 + j] = orig_block[i*stride + j];
 	}
 
 	__syncthreads();
@@ -37,7 +37,7 @@ void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, 
 	{
 		for (int x = 0; x < 8; ++x)
 		{
-			result += abs(ref_block[y*stride + x] - shared_orig_block[y][x]);
+			result += abs(ref_block[y*stride + x] - shared_orig_block[y*8 + x]);
 		}
 	}
 
