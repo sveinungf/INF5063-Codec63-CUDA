@@ -15,7 +15,7 @@ extern "C" {
 
 
 __global__
-void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, int stride)
+void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, int stride, int range_width, int range_height)
 {
 	int i = threadIdx.x;
 	int j = threadIdx.y;
@@ -29,15 +29,24 @@ void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, 
 
 	__syncthreads();
 
-	uint8_t* ref_block = ref_search_range + j*stride + i;
-	int result = 0;
+	int result;
 
-	for (int y = 0; y < 8; ++y)
+	if (j < range_height && i < range_width)
 	{
-		for (int x = 0; x < 8; ++x)
+		uint8_t* ref_block = ref_search_range + j*stride + i;
+		result = 0;
+
+		for (int y = 0; y < 8; ++y)
 		{
-			result += abs(ref_block[y*stride + x] - shared_orig_block[y*8 + x]);
+			for (int x = 0; x < 8; ++x)
+			{
+				result += abs(ref_block[y*stride + x] - shared_orig_block[y*8 + x]);
+			}
 		}
+	}
+	else
+	{
+		result = INT_MAX;
 	}
 
 	block_sads[j*blockDim.x + i] = result;
@@ -143,24 +152,14 @@ void find_min(int* block_sads, int* result)
 static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* result)
 {
 	int numBlocks = 1;
-	dim3 threadsPerBlock(range_width, range_height);
-	block_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, block_sads_gpu, stride);
+	dim3 threadsPerBlock(32, 32);
+	block_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, block_sads_gpu, stride, range_width, range_height);
 
 	int* result_gpu;
 	cudaMalloc((void**) &result_gpu, sizeof(int));
 
 	find_min<<<1, 512>>>(block_sads_gpu, result_gpu);
 	cudaMemcpy(result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
-}
-
-static void sad_block_8x8_semifull_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
-{
-	int numBlocks = 1;
-	dim3 threadsPerBlock(range_width, range_height);
-	block_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, block_sads_gpu, stride);
-
-	const int block_sads_size = range_width * range_height * sizeof(int);
-	cudaMemcpy(block_sads, block_sads_gpu, block_sads_size, cudaMemcpyDeviceToHost);
 }
 
 /* Motion estimation for 8x8 block */
@@ -206,43 +205,18 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 	int mx = mb_x * 8;
 	int my = mb_y * 8;
 
-	int best_sad = INT_MAX;
-
 	int range_width = right - left;
 	int range_height = bottom - top;
 
 	uint8_t* orig_block_gpu = orig_gpu + my * w + mx;
 	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
 
-	if (range_width < 32 || range_height < 32)
-	{
-		sad_block_8x8_semifull_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, block_sads);
+	int result;
+	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, &result);
 
-		int p;
-		for (p = 0; p < range_height; ++p)
-		{
-			int q;
-			for (q = 0; q < range_width; ++q)
-			{
-				int sad = block_sads[p*range_width + q];
+	mb->mv_x = left + (result%32) - mx;
+	mb->mv_y = top + (result/32) - my;
 
-				if (sad < best_sad)
-				{
-					mb->mv_x = left + q - mx;
-					mb->mv_y = top + p - my;
-					best_sad = sad;
-				}
-			}
-		}
-	}
-	else
-	{
-		int result;
-		sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, &result);
-
-		mb->mv_x = left + (result%32) - mx;
-		mb->mv_y = top + (result/32) - my;
-	}
 	/* Here, there should be a threshold on SAD that checks if the motion vector
 	 is cheaper than intraprediction. We always assume MV to be beneficial */
 
