@@ -43,7 +43,117 @@ void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, 
 	block_sads[j*blockDim.x + i] = result;
 }
 
-static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
+__global__
+void find_min(int* block_sads, int* result)
+{
+	int i = threadIdx.x * 2;
+
+	__shared__ int indexes[1024];
+
+	if (block_sads[i] > block_sads[i + 1])
+	{
+		block_sads[i] = block_sads[i + 1];
+		indexes[i] = i + 1;
+	}
+	else
+	{
+		indexes[i] = i;
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 2])
+	{
+		block_sads[i] = block_sads[i + 2];
+		indexes[i] = indexes[i + 2];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 4]) // 1016 v 1020
+	{
+		block_sads[i] = block_sads[i + 4];
+		indexes[i] = indexes[i + 4];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 8]) // 1008 v 1016
+	{
+		block_sads[i] = block_sads[i + 8];
+		indexes[i] = indexes[i + 8];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 16]) // 992 v 1008
+	{
+		block_sads[i] = block_sads[i + 16];
+		indexes[i] = indexes[i + 16];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 32]) // 960 v 992
+	{
+		block_sads[i] = block_sads[i + 32];
+		indexes[i] = indexes[i + 32];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 64]) // 896 v 960, tid = 7
+	{
+		block_sads[i] = block_sads[i + 64];
+		indexes[i] = indexes[i + 64];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 128]) // tid = 3, 768 v 896
+	{
+		block_sads[i] = block_sads[i + 128];
+		indexes[i] = indexes[i + 128];
+	}
+
+	i *= 2;
+	__syncthreads();
+
+	if (i < 1024 && block_sads[i] > block_sads[i + 256]) // tid = 0&1, 0v256 & 512v768
+	{
+		block_sads[i] = block_sads[i + 256];
+		indexes[i] = indexes[i + 256];
+	}
+
+	__syncthreads();
+
+	if (threadIdx.x == 0)
+	{
+		*result = block_sads[0] > block_sads[512] ? indexes[512] : indexes[0];
+	}
+}
+
+static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* result)
+{
+	int numBlocks = 1;
+	dim3 threadsPerBlock(range_width, range_height);
+	block_sad<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, block_sads_gpu, stride);
+
+	int* result_gpu;
+	cudaMalloc((void**) &result_gpu, sizeof(int));
+
+	find_min<<<1, 512>>>(block_sads_gpu, result_gpu);
+	cudaMemcpy(result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
+}
+
+static void sad_block_8x8_semifull_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
 {
 	int numBlocks = 1;
 	dim3 threadsPerBlock(range_width, range_height);
@@ -103,25 +213,36 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 
 	uint8_t* orig_block_gpu = orig_gpu + my * w + mx;
 	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
-	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, block_sads);
 
-	int p;
-	for (p = 0; p < range_height; ++p)
+	if (range_width < 32 || range_height < 32)
 	{
-		int q;
-		for (q = 0; q < range_width; ++q)
-		{
-			int sad = block_sads[p*range_width + q];
+		sad_block_8x8_semifull_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, block_sads);
 
-			if (sad < best_sad)
+		int p;
+		for (p = 0; p < range_height; ++p)
+		{
+			int q;
+			for (q = 0; q < range_width; ++q)
 			{
-				mb->mv_x = left + q - mx;
-				mb->mv_y = top + p - my;
-				best_sad = sad;
+				int sad = block_sads[p*range_width + q];
+
+				if (sad < best_sad)
+				{
+					mb->mv_x = left + q - mx;
+					mb->mv_y = top + p - my;
+					best_sad = sad;
+				}
 			}
 		}
 	}
+	else
+	{
+		int result;
+		sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, &result);
 
+		mb->mv_x = left + (result%32) - mx;
+		mb->mv_y = top + (result/32) - my;
+	}
 	/* Here, there should be a threshold on SAD that checks if the motion vector
 	 is cheaper than intraprediction. We always assume MV to be beneficial */
 
