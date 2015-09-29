@@ -59,6 +59,8 @@ psnr-reference:
 	./tools/yuv-tools/ycbcr.py psnr yuv/foreman.yuv 352 288 IYUV yuv/reference.yuv
 psnr-diff:
 	./tools/yuv-tools/ycbcr.py psnr yuv/reference.yuv 352 288 IYUV yuv/test.yuv
+cmp:
+	@cmp --silent -n "$$(wc -c < yuv/test.yuv)" yuv/test.yuv yuv/reference.yuv && echo "test == reference :D" || echo "test != reference :("
 	
 cachegrind:
 	valgrind --tool=cachegrind --branch-sim=yes --cachegrind-out-file=temp/cachegrind.out ./c63enc -w 352 -h 288 -f 30 -o temp/test.c63 yuv/foreman.yuv
