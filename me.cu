@@ -15,7 +15,7 @@ extern "C" {
 
 
 __global__
-void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, int stride, int range_width, int range_height, int* index_result)
+void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int range_width, int range_height, int* index_result)
 {
 	int i = threadIdx.x;
 	int j = threadIdx.y;
@@ -49,13 +49,14 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int* bl
 		result = INT_MAX;
 	}
 
+	int k = (threadIdx.y*32 + threadIdx.x) * 2;
+
+	__shared__ int block_sads[1024];
+	__shared__ int indexes[1024];
+
 	block_sads[j*blockDim.x + i] = result;
 
 	__syncthreads();
-
-	int k = (threadIdx.y*32 + threadIdx.x) * 2;
-
-	__shared__ int indexes[1024];
 
 	if (k < 1024)
 		{
@@ -150,20 +151,20 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int* bl
 	}
 }
 
-static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* result)
+static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* result)
 {
 	int* result_gpu;
 	cudaMalloc((void**) &result_gpu, sizeof(int));
 
 	int numBlocks = 1;
 	dim3 threadsPerBlock(32, 32);
-	min_sad_block_index<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, block_sads_gpu, stride, range_width, range_height, result_gpu);
+	min_sad_block_index<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, stride, range_width, range_height, result_gpu);
 
 	cudaMemcpy(result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
 }
 
 /* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
+static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component, int* pixel_sads_gpu)
 {
 	struct macroblock *mb = &cm->curframe->mbs[color_component][mb_y * cm->padw[color_component] / 8 + mb_x];
 
@@ -212,7 +213,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
 
 	int result;
-	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, &result);
+	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, &result);
 
 	mb->mv_x = left + (result%32) - mx;
 	mb->mv_y = top + (result/32) - my;
@@ -231,22 +232,17 @@ void c63_motion_estimate(struct c63_common *cm)
 	uint8_t *origY_gpu, *origU_gpu, *origV_gpu;
 	uint8_t *refY_gpu, *refU_gpu, *refV_gpu;
 	int* pixel_sads_gpu;
-	int* block_sads_gpu;
-	int* block_sads;
 
 	const int range = cm->me_search_range;
 	const int max_range_width = 2 * range;
 	const int max_range_height = 2 * range;
 	const int pixel_sads_size = max_range_width * max_range_height * 64 * sizeof(int); // dat memory tho
-	const int block_sads_size = max_range_width * max_range_height * sizeof(int);
 
 	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
 
 	cudaMalloc((void**) &pixel_sads_gpu, pixel_sads_size);
-	cudaMalloc((void**) &block_sads_gpu, block_sads_size);
-	block_sads = (int*) malloc(max_range_width * max_range_height * sizeof(int));
 
 	cudaMalloc((void**) &origY_gpu, frame_size_Y);
 	cudaMalloc((void**) &origU_gpu, frame_size_U);
@@ -269,7 +265,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, origY_gpu, refY_gpu, Y_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, origY_gpu, refY_gpu, Y_COMPONENT, pixel_sads_gpu);
 		}
 	}
 
@@ -278,14 +274,12 @@ void c63_motion_estimate(struct c63_common *cm)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, origU_gpu, refU_gpu, U_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
-			me_block_8x8(cm, mb_x, mb_y, origV_gpu, refV_gpu, V_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, origU_gpu, refU_gpu, U_COMPONENT, pixel_sads_gpu);
+			me_block_8x8(cm, mb_x, mb_y, origV_gpu, refV_gpu, V_COMPONENT, pixel_sads_gpu);
 		}
 	}
 
 	cudaFree(pixel_sads_gpu);
-	cudaFree(block_sads_gpu);
-	free(block_sads);
 
 	cudaFree(origY_gpu);
 	cudaFree(origU_gpu);
