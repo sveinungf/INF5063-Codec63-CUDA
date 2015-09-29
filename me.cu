@@ -55,18 +55,21 @@ void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, 
 __global__
 void find_min(int* block_sads, int* result)
 {
-	int i = threadIdx.x * 2;
+	int i = (threadIdx.y*32 + threadIdx.x) * 2;
 
 	__shared__ int indexes[1024];
 
-	if (block_sads[i] > block_sads[i + 1])
-	{
-		block_sads[i] = block_sads[i + 1];
-		indexes[i] = i + 1;
-	}
-	else
-	{
-		indexes[i] = i;
+	if (i < 1024)
+		{
+		if (block_sads[i] > block_sads[i + 1])
+		{
+			block_sads[i] = block_sads[i + 1];
+			indexes[i] = i + 1;
+		}
+		else
+		{
+			indexes[i] = i;
+		}
 	}
 
 	i *= 2;
@@ -158,7 +161,7 @@ static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_searc
 	int* result_gpu;
 	cudaMalloc((void**) &result_gpu, sizeof(int));
 
-	find_min<<<1, 512>>>(block_sads_gpu, result_gpu);
+	find_min<<<1, threadsPerBlock>>>(block_sads_gpu, result_gpu);
 	cudaMemcpy(result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
 }
 
