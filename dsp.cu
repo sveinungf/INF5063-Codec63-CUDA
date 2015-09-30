@@ -20,8 +20,8 @@ __constant__ float dct_lookup[64] =
 	1.00000000000000000000f,-0.98078525066375732422f, 0.92387950420379638672f,-0.83146959543228149414f, 0.70710676908493041992f,-0.55557024478912353516f, 0.38268342614173889160f,-0.19509032368659973145f
 };
 
-__shared__ float in_block[64];
-__shared__ float out_block[64];
+__shared__ float macro_block[64];
+__shared__ float macro_block2[64];
 
 
 
@@ -44,7 +44,7 @@ __global__ void gpu_transpose_block()
 	
     int i = threadIdx.y;
     int j = threadIdx.x;
-    out_block[i * 8 + j] = in_block[j * 8 + i];
+    macro_block[i * 8 + j] = macro_block2[j * 8 + i];
     /*
     int j;
     for(j = 0; j < 8; j++) {	
@@ -131,9 +131,9 @@ __global__ void gpu_dct_1d()
 	
 	int k;
 	for (k = 0; k < 8; ++k) {
-		idct += in_block[i*8+k] * dct_lookup[k*8+j];
+		idct += macro_block[i*8+k] * dct_lookup[k*8+j];
 	}
-	out_block[i*8+j] = idct;
+	macro_block2[i*8+j] = idct;
 }
 
 /*
@@ -164,9 +164,9 @@ __global__ void gpu_idct_1d()
 	
 	int k;
 	for (k = 0; k < 8; ++k) {
-		idct += in_block[i*8+k] * dct_lookup[j*8+k];
+		idct += macro_block2[i*8+k] * dct_lookup[j*8+k];
 	}
-	out_block[i*8+j] = idct;
+	macro_block[i*8+j] = idct;
 }
 
 
@@ -226,7 +226,7 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 	int j = threadIdx.x;
 	
 	// Copy pixel to shared memory
-	in_block[i*8+j] = in_data[i*8+j];
+	macro_block2[i*8+j] = in_data[i*8+j];
 	
 	__syncthreads();
 	
@@ -235,33 +235,33 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 	
 	// First dct_1d - mb = mb2
 	for (k = 0; k < 8; ++k) {
-		idct += in_block[i*8+k] * dct_lookup[k*8+j];
+		idct += macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
-	out_block[i*8+j] = idct;
+	macro_block[i*8+j] = idct;
 	
 	__syncthreads();
 	
 	// First transpose - mb2 = mb
-	in_block[i * 8 + j] = out_block[j * 8 + i];
+	macro_block2[i * 8 + j] = macro_block[j * 8 + i];
 	
 	__syncthreads();
 	
 	// Second dct_1d - mb = mb2
 	for (k = 0; k < 8; ++k) {
-		idct += in_block[i*8+k] * dct_lookup[k*8+j];
+		idct += macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
-	out_block[i*8+j] = idct;
+	macro_block[i*8+j] = idct;
 	
 	__syncthreads();
 	
-	// Secondt transpose - mb2 = mb
-	in_block[i * 8 + j] = out_block[j * 8 + i];
+	// Second transpose - mb2 = mb
+	macro_block2[i * 8 + j] = macro_block[j * 8 + i];
 	
 	__syncthreads();
 	
 	// Copy to mb - temporary
-	mb2[i*8+j] = in_block[i*8+j];
-	mb[i*8+j] = out_block[i*8+j];
+	mb2[i*8+j] = macro_block2[i*8+j];
+	mb[i*8+j] = macro_block[i*8+j];
 	
 	
 }
@@ -333,40 +333,40 @@ __global__ void gpu_dequant_idct_block_8x8(float *mb, float *mb2, int16_t *out_d
 	int j = threadIdx.x;
 	
 	// Copy to shared memory
-	in_block[i*8+j] = mb[i*8+j];
-	out_block[i*8+j] = mb2[i*8+j];
+	macro_block[i*8+j] = mb[i*8+j];
+	macro_block2[i*8+j] = mb2[i*8+j];
 	
 	__syncthreads();
 	
 	float idct = 0;
 	int k;
 	
-	// First idct
+	// First idct - mb2 = mb
 	for (k = 0; k < 8; ++k) {
-		idct += in_block[i*8+k] * dct_lookup[j*8+k];
+		idct += macro_block[i*8+k] * dct_lookup[j*8+k];
 	}
-	out_block[i*8+j] = idct;
+	macro_block2[i*8+j] = idct;
 	
 	__syncthreads();
 	
-	// First transpose
-	in_block[i * 8 + j] = out_block[j * 8 + i];
+	// First transpose - mb = mb2
+	macro_block[i * 8 + j] = macro_block2[j * 8 + i];
 	
-	// Second idct
+	// Second idct - mb2 = mb
 	for (k = 0; k < 8; ++k) {
-		idct += in_block[i*8+k] * dct_lookup[j*8+k];
+		idct += macro_block[i*8+k] * dct_lookup[j*8+k];
 	}
-	out_block[i*8+j] = idct;
+	macro_block2[i*8+j] = idct;
 	
 	__syncthreads();
 	
-	// Second transpose
-	in_block[i * 8 + j] = out_block[j * 8 + i];
+	// Second transpose - mb = mb2
+	macro_block[i * 8 + j] = macro_block2[j * 8 + i];
 	
 	__syncthreads();
 	
 	// Copy to out_data
-	out_data[i*8+j] = in_block[i*8+j];
+	out_data[i*8+j] = macro_block[i*8+j];
 	
 	
 }
