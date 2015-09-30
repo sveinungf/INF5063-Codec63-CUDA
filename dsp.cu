@@ -27,17 +27,22 @@ __shared__ float idct_macro_block2[64];
 
 
 
-float *gpu_in, *gpu_out;
+float *cuda_mb, *cuda_mb2;
+int16_t *cuda_in_data, *cuda_out_data;
 
 __host__ void cuda_init() {
 	
-	cudaMalloc(&gpu_in, 64*sizeof(float));
-	cudaMalloc(&gpu_out, 64*sizeof(float));	
+	cudaMalloc(&cuda_mb, 64*sizeof(float));
+	cudaMalloc(&cuda_mb2, 64*sizeof(float));
+	cudaMalloc(&cuda_in_data, 64*sizeof(int16_t));
+	cudaMalloc(&cuda_out_data, 64*sizeof(int16_t));
 }
 
 __host__ void cuda_cleanup() {
-	cudaFree(gpu_in);
-	cudaFree(gpu_out);
+	cudaFree(cuda_mb);
+	cudaFree(cuda_mb2);
+	cudaFree(cuda_in_data);
+	cudaFree(cuda_out_data);
 }
 
 
@@ -269,18 +274,8 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 
 __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
-	int16_t *cuda_in_data;
-	cudaMalloc(&cuda_in_data, 64*sizeof(int16_t));
 	cudaMemcpy(cuda_in_data, in_data , 64*sizeof(int16_t), cudaMemcpyHostToDevice); 
-		
-	int16_t *cuda_out_data;	
-	cudaMalloc(&cuda_out_data, 64*sizeof(int16_t));
 	cudaMemcpy(cuda_out_data, out_data, 64*sizeof(int16_t), cudaMemcpyHostToDevice);
-
-	float *cuda_mb;
-	cudaMalloc(&cuda_mb, 64*sizeof(float));
-	float *cuda_mb2;
-	cudaMalloc(&cuda_mb2, 64*sizeof(float));
 
 	/*
 	for (i = 0; i < 64; ++i)
@@ -323,8 +318,8 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 	
 	//gpu_copy_to_mb<<<numBlocks, threadsPerBlock>>>(mb2, mb);
 	
-	float mb[8 * 8];
-	float mb2[8 * 8];
+	float mb[8*8];
+	float mb2[8*8];
 	
 	cudaMemcpy((float*)&mb2, cuda_mb2, 64*sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy((float*)&mb, cuda_mb, 64*sizeof(float), cudaMemcpyDeviceToHost);
@@ -401,16 +396,9 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	dequantize_block(mb, mb2, quant_tbl);
 	scale_block(mb2, mb);
 	
-	float *cuda_mb;
-	cudaMalloc(&cuda_mb, 64*sizeof(float));
+
 	cudaMemcpy(cuda_mb, (float*)&mb, 64*sizeof(float), cudaMemcpyHostToDevice);
-	
-	float *cuda_mb2;
-	cudaMalloc(&cuda_mb2, 64*sizeof(float));
 	cudaMemcpy(cuda_mb2, (float*)&mb2, 64*sizeof(float), cudaMemcpyHostToDevice);
-	
-	int16_t * cuda_out_data;
-	cudaMalloc(&cuda_out_data, 64*sizeof(int16_t));
 	
 	int numBlocks = 1;
 	dim3 threadsPerBlock(8, 8);
