@@ -90,18 +90,6 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int str
 	}
 }
 
-static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* result)
-{
-	int* result_gpu;
-	cudaMalloc((void**) &result_gpu, sizeof(int));
-
-	int numBlocks = 1;
-	dim3 threadsPerBlock(32, 32);
-	min_sad_block_index<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, stride, range_width, range_height, result_gpu);
-
-	cudaMemcpy(result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
-}
-
 /* Motion estimation for 8x8 block */
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component)
 {
@@ -152,7 +140,14 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
 
 	int result;
-	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, &result);
+
+	int* result_gpu;
+	cudaMalloc((void**) &result_gpu, sizeof(int));
+
+	int numBlocks = 1;
+	dim3 threadsPerBlock(32, 32);
+	min_sad_block_index<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, w, range_width, range_height, result_gpu);
+	cudaMemcpy(&result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
 
 	mb->mv_x = left + (result%32) - mx;
 	mb->mv_y = top + (result/32) - my;
