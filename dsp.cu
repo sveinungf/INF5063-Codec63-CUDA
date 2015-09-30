@@ -232,37 +232,51 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 	int i = threadIdx.y;
 	int j = threadIdx.x;
 	
+	
 	// Copy pixel to shared memory
 	dct_macro_block2[i*8+j] = in_data[i*8+j];
-	
 	__syncthreads();
 	
-	float dct = 0;
-	int k;
 	
 	// First dct_1d - mb = mb2
+	float dct = 0;
+	int k;	
 	for (k = 0; k < 8; ++k) {
 		dct += dct_macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
 	dct_macro_block[i*8+j] = dct;
 	__syncthreads();
+	
 	
 	// First transpose - mb2 = mb
 	dct_macro_block2[i * 8 + j] = dct_macro_block[j * 8 + i];
 	__syncthreads();
 	
-	dct = 0;
 	
 	// Second dct_1d - mb = mb2
+	dct = 0;
 	for (k = 0; k < 8; ++k) {
 		dct += dct_macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
 	dct_macro_block[i*8+j] = dct;
 	__syncthreads();
 	
+	
 	// Second transpose - mb2 = mb
 	dct_macro_block2[i * 8 + j] = dct_macro_block[j * 8 + i];
 	__syncthreads();
+	
+	
+	// Scale
+	dct_macro_block[i*8+j] = dct_macro_block2[i*8+j];
+	if(i == 0) {
+		dct_macro_block[i*8+j] *= ISQRT2;
+	}
+	
+	if(j == 0) {
+		dct_macro_block[i*8+j] *= ISQRT2;
+	}
+	
 	
 	// Copy to mb - temporary
 	mb2[i*8+j] = dct_macro_block2[i*8+j];
@@ -324,7 +338,6 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 	cudaMemcpy((float*)&mb2, cuda_mb2, 64*sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy((float*)&mb, cuda_mb, 64*sizeof(float), cudaMemcpyDeviceToHost);
 
-	scale_block(mb2, mb);
 	quantize_block(mb, mb2, quant_tbl);
 
 	int i;
@@ -343,41 +356,51 @@ __global__ void gpu_dequant_idct_block_8x8(float *mb, float *mb2, int16_t *out_d
 	// Copy to shared memory
 	idct_macro_block[i*8+j] = mb[i*8+j];
 	idct_macro_block2[i*8+j] = mb2[i*8+j];
-	
 	__syncthreads();
 	
-	float idct = 0;
-	int k;
+	
+	// Scale
+	idct_macro_block[i*8+j] = idct_macro_block2[i*8+j];
+	if(i == 0) {
+		idct_macro_block[i*8+j] *= ISQRT2;
+	}
+	if(j == 0) {
+		idct_macro_block[i*8+j] *= ISQRT2;
+	}
+	__syncthreads();
+		
 	
 	// First idct - mb2 = mb
+	float idct = 0;
+	int k;
 	for (k = 0; k < 8; ++k) {
 		idct += idct_macro_block[i*8+k] * dct_lookup[j*8+k];
 	}
 	idct_macro_block2[i*8+j] = idct;
-	
 	__syncthreads();
+	
 	
 	// First transpose - mb = mb2
 	idct_macro_block[i * 8 + j] = idct_macro_block2[j * 8 + i];
 	
 	idct = 0;
 	
+	
 	// Second idct - mb2 = mb
 	for (k = 0; k < 8; ++k) {
 		idct += idct_macro_block[i*8+k] * dct_lookup[j*8+k];
 	}
 	idct_macro_block2[i*8+j] = idct;
-	
 	__syncthreads();
+	
 	
 	// Second transpose - mb = mb2
 	idct_macro_block[i * 8 + j] = idct_macro_block2[j * 8 + i];
-	
 	__syncthreads();
+	
 	
 	// Copy to out_data
 	out_data[i*8+j] = idct_macro_block[i*8+j];
-	
 	__syncthreads();
 }
 
@@ -394,8 +417,6 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	}
 
 	dequantize_block(mb, mb2, quant_tbl);
-	scale_block(mb2, mb);
-	
 
 	cudaMemcpy(cuda_mb, (float*)&mb, 64*sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(cuda_mb2, (float*)&mb2, 64*sizeof(float), cudaMemcpyHostToDevice);
