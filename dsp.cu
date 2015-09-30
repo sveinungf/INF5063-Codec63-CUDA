@@ -137,7 +137,7 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uin
 	
 	// Quantize	
 	dct = dct_macro_block[UV_indexes[i*8+j]];
-	dct_macro_block2[i*8+j] = (float) round((dct/4.0/quant_tbl[i*8+j]));
+	dct_macro_block2[i*8+j] = (float) round((dct/4.0) / quant_tbl[i*8+j]);
 	__syncthreads();
 	
 	
