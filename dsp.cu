@@ -238,12 +238,10 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 		dct += macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
 	macro_block[i*8+j] = dct;
-	
 	__syncthreads();
 	
 	// First transpose - mb2 = mb
 	macro_block2[i * 8 + j] = macro_block[j * 8 + i];
-	
 	__syncthreads();
 	
 	dct = 0;
@@ -253,18 +251,15 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 		dct += macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
 	macro_block[i*8+j] = dct;
-	
 	__syncthreads();
 	
 	// Second transpose - mb2 = mb
 	macro_block2[i * 8 + j] = macro_block[j * 8 + i];
-	
 	__syncthreads();
 	
 	// Copy to mb - temporary
 	mb2[i*8+j] = macro_block2[i*8+j];
 	mb[i*8+j] = macro_block[i*8+j];
-	
 	__syncthreads();
 	
 	
