@@ -6,6 +6,8 @@ c63pred
 .cproject
 .project
 dsp_old.cu
+dsp_old1.cu
+/master
 
 # data files
 *.c63
