@@ -37,7 +37,7 @@ clean:
 	rm -f *.o c63enc temp/* yuv/test.yuv
 
 encode: c63enc
-	./c63enc -w 352 -h 288 -o temp/test.c63 yuv/foreman.yuv
+	./c63enc -w 352 -h 288 -f 60 -o temp/test.c63 yuv/foreman.yuv
 decode:
 	./c63dec temp/test.c63 yuv/test.yuv
 
