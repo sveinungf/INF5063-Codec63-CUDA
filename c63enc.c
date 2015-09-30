@@ -301,6 +301,7 @@ int main(int argc, char **argv)
   fclose(infile);
   
   cuda_cleanup();
+  cudaDeviceReset();
 
   return EXIT_SUCCESS;
 }
