@@ -14,6 +14,28 @@ extern "C" {
 #include "me.h"
 
 
+__shared__ int block_sads[1024];
+
+__device__
+void find_min(int k)
+{
+	int vals[9] = { 512, 256, 128, 64, 32, 16, 8, 4, 2 };
+
+	for (int o = 0; o < 9; ++o) {
+		int current = vals[o];
+
+		if (k < current) {
+			block_sads[k] = min(block_sads[k], block_sads[k + current]);
+		}
+
+		__syncthreads();
+	}
+
+	if (k == 0) {
+		block_sads[0] = min(block_sads[0], block_sads[1]);
+	}
+}
+
 __global__
 void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int range_width, int range_height, int* index_result)
 {
@@ -46,39 +68,28 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int str
 	}
 	else
 	{
-		result = 999999;
+		result = INT_MAX;
 	}
 
-	__shared__ int block_sads[1024];
 	__shared__ int block_sads_copy[1024];
+	__shared__ int min;
 
-	block_sads[j*blockDim.x + i] = result;
-	block_sads_copy[j*blockDim.x + i] = result;
+	int k = j*blockDim.x + i;
+	block_sads[k] = result;
+	block_sads_copy[k] = result;
 
 	__syncthreads();
 
-	int k = j*blockDim.x + i;
-
-	int vals[9] = { 512, 256, 128, 64, 32, 16, 8, 4, 2 };
-
-	for (int o = 0; o < 9; ++o) {
-		int current = vals[o];
-
-		if (k < current) {
-			block_sads[k] = min(block_sads[k], block_sads[k + current]);
-		}
-
-		__syncthreads();
-	}
+	find_min(k);
 
 	if (k == 0) {
-		block_sads[0] = min(block_sads[0], block_sads[1]);
+		min = block_sads[0];
 		*index_result = INT_MAX;
 	}
 
 	__syncthreads();
 
-	if (block_sads_copy[k] == block_sads[0]) {
+	if (block_sads_copy[k] == min) {
 		atomicMin(index_result, k);
 	}
 }
