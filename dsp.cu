@@ -178,7 +178,6 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uin
 	if(i == 0) {
 		dct_macro_block[i*8+j] *= ISQRT2;
 	}
-
 	__syncthreads();
 	
 	
@@ -239,7 +238,7 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 
 
 
-__global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+__global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl, float *mb, float *mb2)
 {
 	int i = threadIdx.y;
 	int j = threadIdx.x;
@@ -295,8 +294,10 @@ __global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, 
 	
 	*/
 	// Copy to out_data
-	out_data[i*8+j] = idct_macro_block[i*8+j];
-	in_data[UV_indexes[i*8+j]] = idct_macro_block2[UV_indexes[i*8+j]];
+	//out_data[i*8+j] = idct_macro_block[i*8+j];
+	//in_data[UV_indexes[i*8+j]] = idct_macro_block2[UV_indexes[i*8+j]];
+	mb[i*8+j] = idct_macro_block[i*8+j];
+	mb2[UV_indexes[i*8+j]] = idct_macro_block2[UV_indexes[i*8+j]];
 	__syncthreads();
 }
 
@@ -313,23 +314,16 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	dim3 threadsPerBlock(8, 8);
 	
 	// Call gpu kernel - one thread works on one pixel
-	gpu_dequant_idct_block_8x8<<<numBlocks, threadsPerBlock>>>(cuda_in_data, cuda_out_data, cuda_quant_tbl);
+	gpu_dequant_idct_block_8x8<<<numBlocks, threadsPerBlock>>>(cuda_in_data, cuda_out_data, cuda_quant_tbl, cuda_mb, cuda_mb2);
 	
 	// Copy out_data from gpu memory to host memory
-	cudaMemcpy(out_data, cuda_out_data, 64*sizeof(int16_t), cudaMemcpyDeviceToHost);
-	
-	int16_t in2_data[64];
-	cudaMemcpy((void*)in2_data, cuda_in_data, 64*sizeof(int16_t), cudaMemcpyDeviceToHost);
-	
+	cudaMemcpy(out_data, cuda_out_data, 64*sizeof(int16_t), cudaMemcpyDeviceToHost);	
 	
 	float mb[64] __attribute__((aligned(16)));
 	float mb2[64] __attribute__((aligned(16)));
 	
-	int i;
-	for (i = 0; i < 64; ++i) {
-		mb[i] = in2_data[i];
-		mb2[i] = out_data[i];
-	}	
+	cudaMemcpy(mb, cuda_mb, 64*sizeof(float), cudaMemcpyDeviceToHost);	
+	cudaMemcpy(mb2, cuda_mb2, 64*sizeof(float), cudaMemcpyDeviceToHost);	
 	
 	/* Two 1D inverse DCT operations with transpose */
 	int v;
@@ -343,7 +337,7 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 		idct_1d(mb + v * 8, mb2 + v * 8);
 	}
 	transpose_block(mb2, mb);
-
+	int i;
 	for (i = 0; i < 64; ++i)
 	{
 		out_data[i] = mb[i];
