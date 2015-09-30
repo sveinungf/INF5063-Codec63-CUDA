@@ -1,11 +1,13 @@
+extern "C" {
 #include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
 
-extern "C" {
-#include "dsp.h"
 #include "tables.h"
 }
+
+#include "dsp.h"
+
 
 static void transpose_block(float *in_data, float *out_data)
 {

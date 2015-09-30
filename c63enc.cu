@@ -11,10 +11,10 @@ extern "C" {
 
 #include "c63.h"
 #include "c63_write.h"
-#include "common.h"
 #include "tables.h"
 }
 
+#include "common.h"
 #include "me.h"
 
 

@@ -8,10 +8,9 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "dsp.h"
 }
 
+#include "dsp.h"
 #include "me.h"
 
 
