@@ -230,14 +230,14 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 	
 	__syncthreads();
 	
-	float idct = 0;
+	float dct = 0;
 	int k;
 	
 	// First dct_1d - mb = mb2
 	for (k = 0; k < 8; ++k) {
-		idct += macro_block2[i*8+k] * dct_lookup[k*8+j];
+		dct += macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
-	macro_block[i*8+j] = idct;
+	macro_block[i*8+j] = dct;
 	
 	__syncthreads();
 	
@@ -246,11 +246,13 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 	
 	__syncthreads();
 	
+	dct = 0;
+	
 	// Second dct_1d - mb = mb2
 	for (k = 0; k < 8; ++k) {
-		idct += macro_block2[i*8+k] * dct_lookup[k*8+j];
+		dct += macro_block2[i*8+k] * dct_lookup[k*8+j];
 	}
-	macro_block[i*8+j] = idct;
+	macro_block[i*8+j] = dct;
 	
 	__syncthreads();
 	
@@ -262,6 +264,8 @@ __global__ void gpu_dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, flo
 	// Copy to mb - temporary
 	mb2[i*8+j] = macro_block2[i*8+j];
 	mb[i*8+j] = macro_block[i*8+j];
+	
+	__syncthreads();
 	
 	
 }
@@ -352,6 +356,8 @@ __global__ void gpu_dequant_idct_block_8x8(float *mb, float *mb2, int16_t *out_d
 	// First transpose - mb = mb2
 	macro_block[i * 8 + j] = macro_block2[j * 8 + i];
 	
+	idct = 0;
+	
 	// Second idct - mb2 = mb
 	for (k = 0; k < 8; ++k) {
 		idct += macro_block[i*8+k] * dct_lookup[j*8+k];
@@ -367,6 +373,8 @@ __global__ void gpu_dequant_idct_block_8x8(float *mb, float *mb2, int16_t *out_d
 	
 	// Copy to out_data
 	out_data[i*8+j] = macro_block[i*8+j];
+	
+	__syncthreads();
 	
 	
 }
