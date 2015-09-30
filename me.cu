@@ -46,108 +46,40 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int str
 	}
 	else
 	{
-		result = INT_MAX;
+		result = 999999;
 	}
-
-	int k = (threadIdx.y*32 + threadIdx.x) * 2;
 
 	__shared__ int block_sads[1024];
-	__shared__ int indexes[1024];
+	__shared__ int block_sads_copy[1024];
 
 	block_sads[j*blockDim.x + i] = result;
+	block_sads_copy[j*blockDim.x + i] = result;
 
 	__syncthreads();
 
-	if (k < 1024)
-		{
-		if (block_sads[k] > block_sads[k + 1])
-		{
-			block_sads[k] = block_sads[k + 1];
-			indexes[k] = k + 1;
+	int k = j*blockDim.x + i;
+
+	int vals[9] = { 512, 256, 128, 64, 32, 16, 8, 4, 2 };
+
+	for (int o = 0; o < 9; ++o) {
+		int current = vals[o];
+
+		if (k < current) {
+			block_sads[k] = min(block_sads[k], block_sads[k + current]);
 		}
-		else
-		{
-			indexes[k] = k;
-		}
+
+		__syncthreads();
 	}
 
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 2])
-	{
-		block_sads[k] = block_sads[k + 2];
-		indexes[k] = indexes[k + 2];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 4]) // 1016 v 1020
-	{
-		block_sads[k] = block_sads[k + 4];
-		indexes[k] = indexes[k + 4];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 8]) // 1008 v 1016
-	{
-		block_sads[k] = block_sads[k + 8];
-		indexes[k] = indexes[k + 8];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 16]) // 992 v 1008
-	{
-		block_sads[k] = block_sads[k + 16];
-		indexes[k] = indexes[k + 16];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 32]) // 960 v 992
-	{
-		block_sads[k] = block_sads[k + 32];
-		indexes[k] = indexes[k + 32];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 64]) // 896 v 960, tid = 7
-	{
-		block_sads[k] = block_sads[k + 64];
-		indexes[k] = indexes[k + 64];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 128]) // tid = 3, 768 v 896
-	{
-		block_sads[k] = block_sads[k + 128];
-		indexes[k] = indexes[k + 128];
-	}
-
-	k *= 2;
-	__syncthreads();
-
-	if (k < 1024 && block_sads[k] > block_sads[k + 256]) // tid = 0&1, 0v256 & 512v768
-	{
-		block_sads[k] = block_sads[k + 256];
-		indexes[k] = indexes[k + 256];
+	if (k == 0) {
+		block_sads[0] = min(block_sads[0], block_sads[1]);
+		*index_result = INT_MAX;
 	}
 
 	__syncthreads();
 
-	if (threadIdx.x == 0)
-	{
-		*index_result = block_sads[0] > block_sads[512] ? indexes[512] : indexes[0];
+	if (block_sads_copy[k] == block_sads[0]) {
+		atomicMin(index_result, k);
 	}
 }
 
