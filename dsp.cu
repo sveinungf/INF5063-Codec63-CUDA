@@ -264,7 +264,7 @@ __global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, 
 	}
 	__syncthreads();
 		
-	/*
+	
 	// First idct - mb2 = mb
 	float idct = 0;
 	int k;
@@ -274,7 +274,7 @@ __global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, 
 	idct_macro_block2[i*8+j] = idct;
 	__syncthreads();
 	
-	
+	/*
 	// First transpose - mb = mb2
 	idct_macro_block[i*8+j] = idct_macro_block2[j*8+i];
 	__syncthreads();
@@ -298,7 +298,9 @@ __global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, 
 	//in_data[UV_indexes[i*8+j]] = idct_macro_block2[UV_indexes[i*8+j]];
 	mb[i*8+j] = idct_macro_block[i*8+j];
 	mb2[UV_indexes[i*8+j]] = idct_macro_block2[UV_indexes[i*8+j]];
+	mb2[i*8+j] = idct_macro_block2[i*8+j];
 	__syncthreads();
+	
 }
 
 
@@ -327,10 +329,11 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	
 	/* Two 1D inverse DCT operations with transpose */
 	int v;
+	/*
 	for (v = 0; v < 8; ++v)
 	{
 		idct_1d(mb + v * 8, mb2 + v * 8);
-	}
+	}*/
 	transpose_block(mb2, mb);
 	for (v = 0; v < 8; ++v)
 	{
