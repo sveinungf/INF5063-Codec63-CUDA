@@ -105,6 +105,14 @@ __host__ void cuda_init() {
 	
 	cudaMalloc(&cuda_quant_tbl, 64*sizeof(uint8_t));
 	
+	int i, j;
+	for (i = 0; i < 8; ++i) {
+		for (j = 0; j < 8; ++j)
+		{
+			printf("%f ", cos((3.141592654f/8.0f)*((i*8+j)+0.5f)));
+		}
+		printf("\n");		
+	}
 	//cudaMemcpy((float*)dct_lookup, (float*)dctlookup, 64*sizeof(float), cudaMemcpyHostToDevice);
 }
 
