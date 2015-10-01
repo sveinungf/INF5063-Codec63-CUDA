@@ -8,6 +8,19 @@ extern "C" {
 }
 
 
+__constant__ float dct_lookup[64] =
+{
+  1.0f,  0.980785f,  0.923880f,  0.831470f,  0.707107f,  0.555570f,  0.382683f,  0.195090f,
+  1.0f,  0.831470f,  0.382683f, -0.195090f, -0.707107f, -0.980785f, -0.923880f, -0.555570f,
+  1.0f,  0.555570f, -0.382683f, -0.980785f, -0.707107f,  0.195090f,  0.923880f,  0.831470f,
+  1.0f,  0.195090f, -0.923880f, -0.555570f,  0.707107f,  0.831470f, -0.382683f, -0.980785f,
+  1.0f, -0.195090f, -0.923880f,  0.555570f,  0.707107f, -0.831470f, -0.382683f,  0.980785f,
+  1.0f, -0.555570f, -0.382683f,  0.980785f, -0.707107f, -0.195090f,  0.923880f, -0.831470f,
+  1.0f, -0.831470f,  0.382683f,  0.195090f, -0.707107f,  0.980785f, -0.923880f,  0.555570f,
+  1.0f, -0.980785f,  0.923880f, -0.831470f,  0.707107f, -0.555570f,  0.382683f, -0.195090f
+};
+
+
 /* Array containing the indexes resulting from calculating
  * (zigzag_V[zigzag]*8) + zigzag_U[zigzag] for zigzag = 0, 1, ..., 63
  */
@@ -34,7 +47,7 @@ float *cuda_mb, *cuda_mb2;
 int16_t *cuda_in_data, *cuda_out_data;
 uint8_t *cuda_quant_tbl;
 
-__device__ float dct_lookup[64];
+//__device__ float dct_lookup[64];
 
 
 static void transpose_block(float *in_data, float *out_data)
@@ -91,7 +104,7 @@ __host__ void cuda_init() {
 	
 	cudaMalloc(&cuda_quant_tbl, 64*sizeof(uint8_t));
 	
-	cudaMemcpy((float*)dct_lookup, (float*)dctlookup, 64*sizeof(float), cudaMemcpyHostToDevice);
+	//cudaMemcpy((float*)dct_lookup, (float*)dctlookup, 64*sizeof(float), cudaMemcpyHostToDevice);
 }
 
 __host__ void cuda_cleanup() {
