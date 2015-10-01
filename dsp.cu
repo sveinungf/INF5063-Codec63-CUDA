@@ -335,7 +335,15 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	for (i = 0; i < 64; ++i)
 	{
 		out_data[i] = mb[i];
-		printf("%f\n", cos((3.141592654f/8.0f)*((i)+0.5f)));
+	}
+	
+	int j;
+	for (i = 0; i < 8; ++i) {
+		for (j = 0; j < 8; ++j)
+		{
+			printf("%f ", cos((3.141592654f/8.0f)*((i)+0.5f)));
+		}
+		printf("\n");		
 	}
 }
 
