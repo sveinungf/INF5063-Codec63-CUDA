@@ -34,6 +34,8 @@ float *cuda_mb, *cuda_mb2;
 int16_t *cuda_in_data, *cuda_out_data;
 uint8_t *cuda_quant_tbl;
 
+__device__ float dct_lookup[64];
+
 
 static void transpose_block(float *in_data, float *out_data)
 {
@@ -88,6 +90,8 @@ __host__ void cuda_init() {
 	cudaMalloc(&cuda_out_data, 64*sizeof(int16_t));
 	
 	cudaMalloc(&cuda_quant_tbl, 64*sizeof(uint8_t));
+	
+	cudaMemcpy((float*)dct_lookup, (float*)dctlookup, 64*sizeof(float), cudaMemcpyHostToDevice);
 }
 
 __host__ void cuda_cleanup() {

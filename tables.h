@@ -21,7 +21,7 @@ extern float dctlookup[64];
 extern float dctlookup_trans[64];
 extern uint16_t MVVLC[8];
 extern uint8_t MVVLC_Size[8];
-extern __constant__ float dct_lookup[64];
+//extern __constant__ float dct_lookup[64];
 extern __constant__ float quanttbl_gpu[192];
 
 
