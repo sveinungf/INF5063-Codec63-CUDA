@@ -259,7 +259,7 @@ __global__ void gpu_dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, 
 	float idct = 0;
 	int k;
 	for (k = 0; k < 8; ++k) {
-		idct += idct_macro_block[i*8+k] * dct_lookup[j*8+k];
+		idct += idct_macro_block[i*8+k] * cos((3.141592654f/8.0)*((i*8+j)+0.5));//dct_lookup[j*8+k];
 	}
 	idct_macro_block2[i*8+j] = idct;
 	__syncthreads();
