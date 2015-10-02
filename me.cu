@@ -15,7 +15,7 @@ extern "C" {
 
 
 __device__
-void min_reduce(int i, int* values)
+static void min_reduce(int i, int* values)
 {
 	const int initial_comparisons = (blockDim.x * blockDim.y) / 2;
 
@@ -34,8 +34,24 @@ void min_reduce(int i, int* values)
 	}
 }
 
+__device__
+static void first_min_occurrence(int i, int* values, int value, int* result)
+{
+	min_reduce(i, values);
+
+	if (i == 0) {
+		*result = INT_MAX;
+	}
+
+	__syncthreads();
+
+	if (value == values[0]) {
+		atomicMin(result, i);
+	}
+}
+
 __global__
-void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int range_width, int range_height, int* index_result)
+static void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int range_width, int range_height, int* index_result)
 {
 	int i = threadIdx.x;
 	int j = threadIdx.y;
@@ -148,19 +164,8 @@ static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int* lefts, in
 
 	__syncthreads();
 
-	min_reduce(k, block_sads);
-
 	__shared__ int index_result;
-
-	if (k == 0) {
-		index_result = INT_MAX;
-	}
-
-	__syncthreads();
-
-	if (result == block_sads[0]) {
-		atomicMin(&index_result, k);
-	}
+	first_min_occurrence(k, block_sads, result, &index_result);
 
 	__syncthreads();
 
