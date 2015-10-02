@@ -90,7 +90,7 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int str
 }
 
 __global__
-static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int range, int w, int h, int* vector_x, int* vector_y)
+static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int* lefts, int* rights, int* tops, int* bottoms, int range, int w, int h, int* vector_x, int* vector_y)
 {
 	const int i = threadIdx.x;
 	const int j = threadIdx.y;
@@ -99,47 +99,10 @@ static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int range, int
 	const int mb_x = blockIdx.x;
 	const int mb_y = blockIdx.y;
 
-	__shared__ int left;
-	__shared__ int top;
-	__shared__ int right;
-	__shared__ int bottom;
-
-	switch (k) {
-		case 0:
-			left = mb_x * 8 - range;
-
-			if (left < 0)
-			{
-				left = 0;
-			}
-			break;
-		case 1:
-			top = mb_y * 8 - range;
-
-			if (top < 0)
-			{
-				top = 0;
-			}
-			break;
-		case 2:
-			right = mb_x * 8 + range;
-
-			if (right > (w - 8))
-			{
-				right = w - 8;
-			}
-			break;
-		case 3:
-			bottom = mb_y * 8 + range;
-
-			if (bottom > (h - 8))
-			{
-				bottom = h - 8;
-			}
-			break;
-	}
-
-	__syncthreads();
+	int left = lefts[mb_x];
+	int top = tops[mb_y];
+	int right = rights[mb_x];
+	int bottom = bottoms[mb_y];
 
 	int mx = mb_x * 8;
 	int my = mb_y * 8;
@@ -318,9 +281,70 @@ void c63_motion_estimate(struct c63_common *cm)
 	cudaMalloc((void**) &vector_x_gpu, vector_size);
 	cudaMalloc((void**) &vector_y_gpu, vector_size);
 
+	int* lefts_gpu;
+	int* rights_gpu;
+	int* tops_gpu;
+	int* bottoms_gpu;
+	cudaMalloc((void**) &lefts_gpu, cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &rights_gpu, cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &tops_gpu, cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &bottoms_gpu, cm->mb_rows * sizeof(int));
+
+	int* lefts = new int[cm->mb_cols];
+	int* rights = new int[cm->mb_cols];
+	int* tops = new int[cm->mb_rows];
+	int* bottoms = new int[cm->mb_rows];
+
+	// LEFTS
+	lefts[0] = 0;
+	lefts[1] = 0;
+	lefts[2] = 0;
+	for (int i = 3; i < cm->mb_cols; ++i) {
+		lefts[i] = (i-2)*8; // 2 pga range er 16
+	}
+
+	// RIGHTS
+	for (int i = 0; i < cm->mb_cols-3; ++i) {
+		rights[i] = (i+2)*8;
+	}
+	rights[cm->mb_cols-3] = w - 8;
+	rights[cm->mb_cols-2] = w - 8;
+	rights[cm->mb_cols-1] = w - 8;
+
+	// TOPS
+	tops[0] = 0;
+	tops[1] = 0;
+	tops[2] = 0;
+
+	for (int i = 3; i < cm->mb_rows; ++i) {
+		tops[i] = (i-2)*8;
+	}
+
+	// BOTTOMS
+	for (int i = 0; i < cm->mb_rows-3; ++i) {
+		bottoms[i] = (i+2)*8;
+	}
+	bottoms[cm->mb_rows-3] = h - 8;
+	bottoms[cm->mb_rows-2] = h - 8;
+	bottoms[cm->mb_rows-1] = h - 8;
+
+	cudaMemcpy(lefts_gpu, lefts, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(rights_gpu, rights, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(tops_gpu, tops, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(bottoms_gpu, bottoms, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+
 	dim3 numBlocks(cm->mb_cols, cm->mb_rows);
 	dim3 threadsPerBlock(32, 32);
-	me_block_8x8_gpu<<<numBlocks, threadsPerBlock>>>(origY_gpu, refY_gpu, cm->me_search_range, w, h, vector_x_gpu, vector_y_gpu);
+	me_block_8x8_gpu<<<numBlocks, threadsPerBlock>>>(origY_gpu, refY_gpu, lefts_gpu, rights_gpu, tops_gpu, bottoms_gpu, cm->me_search_range, w, h, vector_x_gpu, vector_y_gpu);
+
+	delete[] lefts;
+	delete[] rights;
+	delete[] tops;
+	delete[] bottoms;
+	cudaFree(lefts_gpu);
+	cudaFree(rights_gpu);
+	cudaFree(tops_gpu);
+	cudaFree(bottoms_gpu);
 
 	cudaMemcpy(vectors_x, vector_x_gpu, vector_size, cudaMemcpyDeviceToHost);
 	cudaMemcpy(vectors_y, vector_y_gpu, vector_size, cudaMemcpyDeviceToHost);
