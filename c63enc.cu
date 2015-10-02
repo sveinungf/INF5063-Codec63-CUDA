@@ -144,6 +144,45 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   ++cm->frames_since_keyframe;
 }
 
+static void init_cuda_data(c63_common* cm)
+{
+	cuda_data_me* cuda_me = &(cm->cuda_me);
+
+	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
+	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
+	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
+
+	const int range = cm->me_search_range;
+	const int max_range_width = 2 * range;
+	const int max_range_height = 2 * range;
+	const int block_sads_size = max_range_width * max_range_height * sizeof(int);
+
+	cudaMalloc((void**) &(cuda_me->origY_gpu), frame_size_Y);
+	cudaMalloc((void**) &(cuda_me->origU_gpu), frame_size_U);
+	cudaMalloc((void**) &(cuda_me->origV_gpu), frame_size_V);
+
+	cudaMalloc((void**) &(cuda_me->refY_gpu), frame_size_Y);
+	cudaMalloc((void**) &(cuda_me->refU_gpu), frame_size_U);
+	cudaMalloc((void**) &(cuda_me->refV_gpu), frame_size_V);
+
+	cudaMalloc((void**) &(cuda_me->block_sads_gpu), block_sads_size);
+	cuda_me->block_sads = (int*) malloc(max_range_width * max_range_height * sizeof(int));
+}
+
+static void cleanup_cuda_data(c63_common* cm)
+{
+	cudaFree(cm->cuda_me.origY_gpu);
+	cudaFree(cm->cuda_me.origU_gpu);
+	cudaFree(cm->cuda_me.origV_gpu);
+
+	cudaFree(cm->cuda_me.refY_gpu);
+	cudaFree(cm->cuda_me.refU_gpu);
+	cudaFree(cm->cuda_me.refV_gpu);
+
+	cudaFree(cm->cuda_me.block_sads_gpu);
+	free(cm->cuda_me.block_sads);
+}
+
 struct c63_common* init_c63_enc(int width, int height)
 {
   int i;
@@ -178,6 +217,8 @@ struct c63_common* init_c63_enc(int width, int height)
     cm->quanttbl[U_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
   }
+
+  init_cuda_data(cm);
 
   return cm;
 }
@@ -296,6 +337,8 @@ int main(int argc, char **argv)
   printf("-----------\n");
   printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
 # endif
+
+  cleanup_cuda_data(cm);
 
   fclose(outfile);
   fclose(infile);

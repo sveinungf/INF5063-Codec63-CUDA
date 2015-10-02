@@ -86,6 +86,20 @@ struct frame
   int keyframe;
 };
 
+struct cuda_data_me
+{
+	uint8_t* origY_gpu;
+	uint8_t* origU_gpu;
+	uint8_t* origV_gpu;
+
+	uint8_t* refY_gpu;
+	uint8_t* refU_gpu;
+	uint8_t* refV_gpu;
+
+	int* block_sads_gpu;
+	int* block_sads;
+};
+
 struct c63_common
 {
   int width, height;
@@ -110,6 +124,8 @@ struct c63_common
   int frames_since_keyframe;
 
   struct entropy_ctx e_ctx;
+
+  struct cuda_data_me cuda_me;
 };
 
 #endif  /* C63_C63_H_ */

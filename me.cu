@@ -135,45 +135,24 @@ void c63_motion_estimate(struct c63_common *cm)
 	/* Compare this frame with previous reconstructed frame */
 	int mb_x, mb_y;
 
-	uint8_t *origY_gpu, *origU_gpu, *origV_gpu;
-	uint8_t *refY_gpu, *refU_gpu, *refV_gpu;
-	int* block_sads_gpu;
-	int* block_sads;
-
-	const int range = cm->me_search_range;
-	const int max_range_width = 2 * range;
-	const int max_range_height = 2 * range;
-	const int block_sads_size = max_range_width * max_range_height * sizeof(int);
-
 	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
 
-	cudaMalloc((void**) &block_sads_gpu, block_sads_size);
-	block_sads = (int*) malloc(max_range_width * max_range_height * sizeof(int));
+	cudaMemcpy(cm->cuda_me.origY_gpu, cm->curframe->orig->Y, frame_size_Y, cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.origU_gpu, cm->curframe->orig->U, frame_size_U, cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.origV_gpu, cm->curframe->orig->V, frame_size_V, cudaMemcpyHostToDevice);
 
-	cudaMalloc((void**) &origY_gpu, frame_size_Y);
-	cudaMalloc((void**) &origU_gpu, frame_size_U);
-	cudaMalloc((void**) &origV_gpu, frame_size_V);
-
-	cudaMalloc((void**) &refY_gpu, frame_size_Y);
-	cudaMalloc((void**) &refU_gpu, frame_size_U);
-	cudaMalloc((void**) &refV_gpu, frame_size_V);
-
-	cudaMemcpy(origY_gpu, cm->curframe->orig->Y, frame_size_Y, cudaMemcpyHostToDevice);
-	cudaMemcpy(origU_gpu, cm->curframe->orig->U, frame_size_U, cudaMemcpyHostToDevice);
-	cudaMemcpy(origV_gpu, cm->curframe->orig->V, frame_size_V, cudaMemcpyHostToDevice);
-
-	cudaMemcpy(refY_gpu, cm->refframe->recons->Y, frame_size_Y, cudaMemcpyHostToDevice);
-	cudaMemcpy(refU_gpu, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
-	cudaMemcpy(refV_gpu, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.refY_gpu, cm->refframe->recons->Y, frame_size_Y, cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.refU_gpu, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.refV_gpu, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
 
 	/* Luma */
 	for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, origY_gpu, refY_gpu, Y_COMPONENT, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, Y_COMPONENT, cm->cuda_me.block_sads_gpu, cm->cuda_me.block_sads);
 		}
 	}
 
@@ -182,21 +161,10 @@ void c63_motion_estimate(struct c63_common *cm)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, origU_gpu, refU_gpu, U_COMPONENT, block_sads_gpu, block_sads);
-			me_block_8x8(cm, mb_x, mb_y, origV_gpu, refV_gpu, V_COMPONENT, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, U_COMPONENT, cm->cuda_me.block_sads_gpu, cm->cuda_me.block_sads);
+			me_block_8x8(cm, mb_x, mb_y, cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, V_COMPONENT, cm->cuda_me.block_sads_gpu, cm->cuda_me.block_sads);
 		}
 	}
-
-	cudaFree(block_sads_gpu);
-	free(block_sads);
-
-	cudaFree(origY_gpu);
-	cudaFree(origU_gpu);
-	cudaFree(origV_gpu);
-
-	cudaFree(refY_gpu);
-	cudaFree(refU_gpu);
-	cudaFree(refV_gpu);
 }
 
 /* Motion compensation for 8x8 block */
