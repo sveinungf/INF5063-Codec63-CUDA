@@ -15,22 +15,40 @@ extern "C" {
 
 
 __device__
+static void min_warp_reduce(int i, volatile int* values)
+{
+	values[i] = min(values[i], values[i + 32]);
+	values[i] = min(values[i], values[i + 16]);
+	values[i] = min(values[i], values[i + 8]);
+	values[i] = min(values[i], values[i + 4]);
+	values[i] = min(values[i], values[i + 2]);
+	values[i] = min(values[i], values[i + 1]);
+}
+
+__device__
 static void min_reduce(int i, int* values)
 {
-	const int initial_comparisons = (blockDim.x * blockDim.y) / 2;
+	const int initial_stride = (blockDim.x * blockDim.y) / 2;
 
-	for (int stride = initial_comparisons; stride > 1; stride >>= 1)
+	if (i < 512)
 	{
-		if (i < stride)
+		for (int stride = initial_stride; stride > 32; stride >>= 1)
 		{
 			values[i] = min(values[i], values[i + stride]);
+			__syncthreads();
 		}
 
-		__syncthreads();
+		if (i < 32)
+		{
+			min_warp_reduce(i, values);
+		}
 	}
-
-	if (i == 0) {
-		values[0] = min(values[0], values[1]);
+	else
+	{
+		for (int stride = initial_stride; stride > 32; stride >>= 1)
+		{
+			__syncthreads();
+		}
 	}
 }
 
