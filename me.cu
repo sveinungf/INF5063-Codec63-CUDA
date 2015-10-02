@@ -28,15 +28,19 @@ static void min_warp_reduce(int i, volatile int* values)
 __device__
 static void min_reduce(int i, int* values)
 {
-	const int initial_stride = (blockDim.x * blockDim.y) / 2;
-
 	if (i < 512)
 	{
-		for (int stride = initial_stride; stride > 32; stride >>= 1)
-		{
-			values[i] = min(values[i], values[i + stride]);
-			__syncthreads();
-		}
+		values[i] = min(values[i], values[i + 512]);
+		__syncthreads();
+
+		values[i] = min(values[i], values[i + 256]);
+		__syncthreads();
+
+		values[i] = min(values[i], values[i + 128]);
+		__syncthreads();
+
+		values[i] = min(values[i], values[i + 64]);
+		__syncthreads();
 
 		if (i < 32)
 		{
@@ -45,10 +49,10 @@ static void min_reduce(int i, int* values)
 	}
 	else
 	{
-		for (int stride = initial_stride; stride > 32; stride >>= 1)
-		{
-			__syncthreads();
-		}
+		__syncthreads();
+		__syncthreads();
+		__syncthreads();
+		__syncthreads();
 	}
 }
 
