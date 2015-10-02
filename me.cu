@@ -262,57 +262,9 @@ void c63_motion_estimate(struct c63_common *cm)
 	int h = cm->padh[Y_COMPONENT];
 
 	/* Luma */
-	int* lefts = new int[cm->mb_cols];
-	int* rights = new int[cm->mb_cols];
-	int* tops = new int[cm->mb_rows];
-	int* bottoms = new int[cm->mb_rows];
-
-	// LEFTS
-	lefts[0] = 0;
-	lefts[1] = 0;
-	lefts[2] = 0;
-	for (int i = 3; i < cm->mb_cols; ++i) {
-		lefts[i] = (i-2)*8; // 2 pga range er 16
-	}
-
-	// RIGHTS
-	for (int i = 0; i < cm->mb_cols-3; ++i) {
-		rights[i] = (i+2)*8;
-	}
-	rights[cm->mb_cols-3] = w - 8;
-	rights[cm->mb_cols-2] = w - 8;
-	rights[cm->mb_cols-1] = w - 8;
-
-	// TOPS
-	tops[0] = 0;
-	tops[1] = 0;
-	tops[2] = 0;
-
-	for (int i = 3; i < cm->mb_rows; ++i) {
-		tops[i] = (i-2)*8;
-	}
-
-	// BOTTOMS
-	for (int i = 0; i < cm->mb_rows-3; ++i) {
-		bottoms[i] = (i+2)*8;
-	}
-	bottoms[cm->mb_rows-3] = h - 8;
-	bottoms[cm->mb_rows-2] = h - 8;
-	bottoms[cm->mb_rows-1] = h - 8;
-
-	cudaMemcpy(cm->cuda_me.lefts_gpu, lefts, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.rights_gpu, rights, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.tops_gpu, tops, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.bottoms_gpu, bottoms, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
-
 	dim3 numBlocks(cm->mb_cols, cm->mb_rows);
 	dim3 threadsPerBlock(32, 32);
 	me_block_8x8_gpu<<<numBlocks, threadsPerBlock>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.lefts_gpu, cm->cuda_me.rights_gpu, cm->cuda_me.tops_gpu, cm->cuda_me.bottoms_gpu, cm->me_search_range, w, h, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
-
-	delete[] lefts;
-	delete[] rights;
-	delete[] tops;
-	delete[] bottoms;
 
 	const int vector_size = cm->mb_rows*cm->mb_cols*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_size, cudaMemcpyDeviceToHost);
