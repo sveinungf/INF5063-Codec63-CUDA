@@ -15,21 +15,21 @@ extern "C" {
 
 
 __device__
-void find_min(int k, int* values)
+void min_reduce(int i, int* values)
 {
-	int vals[9] = { 512, 256, 128, 64, 32, 16, 8, 4, 2 };
+	const int initial_comparisons = (blockDim.x * blockDim.y) / 2;
 
-	for (int o = 0; o < 9; ++o) {
-		int current = vals[o];
-
-		if (k < current) {
-			values[k] = min(values[k], values[k + current]);
+	for (int stride = initial_comparisons; stride > 1; stride >>= 1)
+	{
+		if (i < stride)
+		{
+			values[i] = min(values[i], values[i + stride]);
 		}
 
 		__syncthreads();
 	}
 
-	if (k == 0) {
+	if (i == 0) {
 		values[0] = min(values[0], values[1]);
 	}
 }
@@ -76,7 +76,7 @@ void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int str
 
 	__syncthreads();
 
-	find_min(k, block_sads);
+	min_reduce(k, block_sads);
 
 	if (k == 0) {
 		*index_result = INT_MAX;
@@ -148,7 +148,7 @@ static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int* lefts, in
 
 	__syncthreads();
 
-	find_min(k, block_sads);
+	min_reduce(k, block_sads);
 
 	__shared__ int index_result;
 
