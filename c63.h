@@ -104,9 +104,11 @@ struct cuda_data_me
 	int* vector_y_gpu;
 
 	int* lefts_gpu;
-	int* rights_gpu;
+	int* rightsY_gpu;
+	int* rightsUV_gpu;
 	int* tops_gpu;
-	int* bottoms_gpu;
+	int* bottomsY_gpu;
+	int* bottomsUV_gpu;
 };
 
 struct c63_common

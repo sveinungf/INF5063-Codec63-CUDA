@@ -146,13 +146,17 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 
 static void set_cuda_searchrange_boundaries(c63_common* cm)
 {
-	int w = cm->padw[Y_COMPONENT];
-	int h = cm->padh[Y_COMPONENT];
+	int wY = cm->padw[Y_COMPONENT];
+	int hY = cm->padh[Y_COMPONENT];
+	int wUV = cm->padw[U_COMPONENT];
+	int hUV = cm->padh[U_COMPONENT];
 
 	int* lefts = new int[cm->mb_cols];
-	int* rights = new int[cm->mb_cols];
+	int* rightsY = new int[cm->mb_cols];
+	int* rightsUV = new int[cm->mb_cols];
 	int* tops = new int[cm->mb_rows];
-	int* bottoms = new int[cm->mb_rows];
+	int* bottomsY = new int[cm->mb_rows];
+	int* bottomsUV = new int[cm->mb_rows];
 
 	// LEFTS
 	lefts[0] = 0;
@@ -164,11 +168,18 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 
 	// RIGHTS
 	for (int i = 0; i < cm->mb_cols-3; ++i) {
-		rights[i] = (i+2)*8;
+		rightsY[i] = (i+2)*8;
 	}
-	rights[cm->mb_cols-3] = w - 8;
-	rights[cm->mb_cols-2] = w - 8;
-	rights[cm->mb_cols-1] = w - 8;
+	rightsY[cm->mb_cols-3] = wY - 8;
+	rightsY[cm->mb_cols-2] = wY - 8;
+	rightsY[cm->mb_cols-1] = wY - 8;
+
+	for (int i = 0; i < cm->mb_cols/2-3; ++i) {
+		rightsUV[i] = (i+2)*8;
+	}
+	rightsUV[cm->mb_cols/2-3] = wUV - 8;
+	rightsUV[cm->mb_cols/2-2] = wUV - 8;
+	rightsUV[cm->mb_cols/2-1] = wUV - 8;
 
 	// TOPS
 	tops[0] = 0;
@@ -181,21 +192,32 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 
 	// BOTTOMS
 	for (int i = 0; i < cm->mb_rows-3; ++i) {
-		bottoms[i] = (i+2)*8;
+		bottomsY[i] = (i+2)*8;
 	}
-	bottoms[cm->mb_rows-3] = h - 8;
-	bottoms[cm->mb_rows-2] = h - 8;
-	bottoms[cm->mb_rows-1] = h - 8;
+	bottomsY[cm->mb_rows-3] = hY - 8;
+	bottomsY[cm->mb_rows-2] = hY - 8;
+	bottomsY[cm->mb_rows-1] = hY - 8;
+
+	for (int i = 0; i < cm->mb_rows/2-3; ++i) {
+		bottomsUV[i] = (i+2)*8;
+	}
+	bottomsUV[cm->mb_rows/2-3] = hUV - 8;
+	bottomsUV[cm->mb_rows/2-2] = hUV - 8;
+	bottomsUV[cm->mb_rows/2-1] = hUV - 8;
 
 	cudaMemcpy(cm->cuda_me.lefts_gpu, lefts, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.rights_gpu, rights, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.rightsY_gpu, rightsY, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.rightsUV_gpu, rightsUV, cm->mb_cols/2 * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.tops_gpu, tops, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.bottoms_gpu, bottoms, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.bottomsY_gpu, bottomsY, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.bottomsUV_gpu, bottomsUV, cm->mb_rows/2 * sizeof(int), cudaMemcpyHostToDevice);
 
 	delete[] lefts;
-	delete[] rights;
+	delete[] rightsY;
+	delete[] rightsUV;
 	delete[] tops;
-	delete[] bottoms;
+	delete[] bottomsY;
+	delete[] bottomsUV;
 }
 
 static void init_cuda_data(c63_common* cm)
@@ -223,9 +245,11 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->vector_y_gpu), vector_size);
 
 	cudaMalloc((void**) &(cuda_me->lefts_gpu), cm->mb_cols * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->rights_gpu), cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->rightsUV_gpu), cm->mb_cols * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->tops_gpu), cm->mb_rows * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->bottoms_gpu), cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rows * sizeof(int));
 
 	set_cuda_searchrange_boundaries(cm);
 }
@@ -247,9 +271,11 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.vector_y_gpu);
 
 	cudaFree(cm->cuda_me.lefts_gpu);
-	cudaFree(cm->cuda_me.rights_gpu);
+	cudaFree(cm->cuda_me.rightsY_gpu);
+	cudaFree(cm->cuda_me.rightsUV_gpu);
 	cudaFree(cm->cuda_me.tops_gpu);
-	cudaFree(cm->cuda_me.bottoms_gpu);
+	cudaFree(cm->cuda_me.bottomsY_gpu);
+	cudaFree(cm->cuda_me.bottomsUV_gpu);
 }
 
 struct c63_common* init_c63_enc(int width, int height)
