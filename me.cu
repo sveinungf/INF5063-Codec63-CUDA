@@ -25,22 +25,27 @@ static void min_warp_reduce(int i, volatile int* values)
 	values[i] = min(values[i], values[i + 1]);
 }
 
+template<int block_size>
 __device__
 static void min_reduce(int i, int* values)
 {
-	if (i < 512)
+	if (i < block_size/2)
 	{
-		values[i] = min(values[i], values[i + 512]);
-		__syncthreads();
-
-		values[i] = min(values[i], values[i + 256]);
-		__syncthreads();
-
-		values[i] = min(values[i], values[i + 128]);
-		__syncthreads();
-
-		values[i] = min(values[i], values[i + 64]);
-		__syncthreads();
+		// Intentionally no break between cases
+		switch (block_size) {
+			case 1024:
+				values[i] = min(values[i], values[i + 512]);
+				__syncthreads();
+			case 512:
+				values[i] = min(values[i], values[i + 256]);
+				__syncthreads();
+			case 256:
+				values[i] = min(values[i], values[i + 128]);
+				__syncthreads();
+			case 128:
+				values[i] = min(values[i], values[i + 64]);
+				__syncthreads();
+		}
 
 		if (i < 32)
 		{
@@ -49,17 +54,23 @@ static void min_reduce(int i, int* values)
 	}
 	else
 	{
-		__syncthreads();
-		__syncthreads();
-		__syncthreads();
-		__syncthreads();
+		switch (block_size) {
+			case 1024:
+				__syncthreads();
+			case 512:
+				__syncthreads();
+			case 256:
+				__syncthreads();
+			case 128:
+				__syncthreads();
+		}
 	}
 }
 
 __device__
 static void first_min_occurrence(int i, int* values, int value, int* result)
 {
-	min_reduce(i, values);
+	min_reduce<1024>(i, values);
 
 	if (i == 0) {
 		*result = INT_MAX;
@@ -114,7 +125,7 @@ static void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, 
 
 	__syncthreads();
 
-	min_reduce(k, block_sads);
+	min_reduce<1024>(k, block_sads);
 
 	if (k == 0) {
 		*index_result = INT_MAX;
