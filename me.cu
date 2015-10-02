@@ -18,14 +18,15 @@ extern "C" {
 __global__
 void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, int stride)
 {
-	int i = threadIdx.x;
-	int j = threadIdx.y;
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int k = j*blockDim.x + i;
 
 	__shared__ uint8_t shared_orig_block[64];
 
 	if (i < 8 && j < 8)
 	{
-		shared_orig_block[i*8 + j] = orig_block[i*stride + j];
+		shared_orig_block[j*8 + i] = orig_block[j*stride + i];
 	}
 
 	__syncthreads();
@@ -41,10 +42,10 @@ void block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int* block_sads, 
 		}
 	}
 
-	block_sads[j*blockDim.x + i] = result;
+	block_sads[k] = result;
 }
 
-static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
+static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_search_range_gpu, int range_width, int range_height, int stride, int* block_sads_gpu, int* block_sads)
 {
 	int numBlocks = 1;
 	dim3 threadsPerBlock(range_width, range_height);
@@ -55,7 +56,7 @@ static void sad_block_8x8_full_range(uint8_t* orig_block_gpu, uint8_t* ref_searc
 }
 
 /* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component, int* pixel_sads_gpu, int* block_sads_gpu, int* block_sads)
+static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component, int* block_sads_gpu, int* block_sads)
 {
 	struct macroblock *mb = &cm->curframe->mbs[color_component][mb_y * cm->padw[color_component] / 8 + mb_x];
 
@@ -104,7 +105,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *ori
 
 	uint8_t* orig_block_gpu = orig_gpu + my * w + mx;
 	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
-	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, pixel_sads_gpu, block_sads_gpu, block_sads);
+	sad_block_8x8_full_range(orig_block_gpu, ref_search_range_gpu, range_width, range_height, w, block_sads_gpu, block_sads);
 
 	int p;
 	for (p = 0; p < range_height; ++p)
@@ -136,21 +137,18 @@ void c63_motion_estimate(struct c63_common *cm)
 
 	uint8_t *origY_gpu, *origU_gpu, *origV_gpu;
 	uint8_t *refY_gpu, *refU_gpu, *refV_gpu;
-	int* pixel_sads_gpu;
 	int* block_sads_gpu;
 	int* block_sads;
 
 	const int range = cm->me_search_range;
 	const int max_range_width = 2 * range;
 	const int max_range_height = 2 * range;
-	const int pixel_sads_size = max_range_width * max_range_height * 64 * sizeof(int); // dat memory tho
 	const int block_sads_size = max_range_width * max_range_height * sizeof(int);
 
 	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
 
-	cudaMalloc((void**) &pixel_sads_gpu, pixel_sads_size);
 	cudaMalloc((void**) &block_sads_gpu, block_sads_size);
 	block_sads = (int*) malloc(max_range_width * max_range_height * sizeof(int));
 
@@ -175,7 +173,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, origY_gpu, refY_gpu, Y_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, origY_gpu, refY_gpu, Y_COMPONENT, block_sads_gpu, block_sads);
 		}
 	}
 
@@ -184,12 +182,11 @@ void c63_motion_estimate(struct c63_common *cm)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, origU_gpu, refU_gpu, U_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
-			me_block_8x8(cm, mb_x, mb_y, origV_gpu, refV_gpu, V_COMPONENT, pixel_sads_gpu, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, origU_gpu, refU_gpu, U_COMPONENT, block_sads_gpu, block_sads);
+			me_block_8x8(cm, mb_x, mb_y, origV_gpu, refV_gpu, V_COMPONENT, block_sads_gpu, block_sads);
 		}
 	}
 
-	cudaFree(pixel_sads_gpu);
 	cudaFree(block_sads_gpu);
 	free(block_sads);
 
