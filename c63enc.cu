@@ -152,11 +152,6 @@ static void init_cuda_data(c63_common* cm)
 	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
 
-	const int range = cm->me_search_range;
-	const int max_range_width = 2 * range;
-	const int max_range_height = 2 * range;
-	const int block_sads_size = max_range_width * max_range_height * sizeof(int);
-
 	cudaMalloc((void**) &(cuda_me->origY_gpu), frame_size_Y);
 	cudaMalloc((void**) &(cuda_me->origU_gpu), frame_size_U);
 	cudaMalloc((void**) &(cuda_me->origV_gpu), frame_size_V);
@@ -165,8 +160,18 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->refU_gpu), frame_size_U);
 	cudaMalloc((void**) &(cuda_me->refV_gpu), frame_size_V);
 
-	cudaMalloc((void**) &(cuda_me->block_sads_gpu), block_sads_size);
-	cuda_me->block_sads = (int*) malloc(max_range_width * max_range_height * sizeof(int));
+	const int vector_size = cm->mb_rows*cm->mb_cols*sizeof(int);
+
+	cuda_me->vector_x = new int[cm->mb_rows * cm->mb_cols];
+	cuda_me->vector_y = new int[cm->mb_rows * cm->mb_cols];
+
+	cudaMalloc((void**) &(cuda_me->vector_x_gpu), vector_size);
+	cudaMalloc((void**) &(cuda_me->vector_y_gpu), vector_size);
+
+	cudaMalloc((void**) &(cuda_me->lefts_gpu), cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->rights_gpu), cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->tops_gpu), cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->bottoms_gpu), cm->mb_rows * sizeof(int));
 }
 
 static void cleanup_cuda_data(c63_common* cm)
@@ -179,8 +184,16 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.refU_gpu);
 	cudaFree(cm->cuda_me.refV_gpu);
 
-	cudaFree(cm->cuda_me.block_sads_gpu);
-	free(cm->cuda_me.block_sads);
+	delete[] cm->cuda_me.vector_x;
+	delete[] cm->cuda_me.vector_y;
+
+	cudaFree(cm->cuda_me.vector_x_gpu);
+	cudaFree(cm->cuda_me.vector_y_gpu);
+
+	cudaFree(cm->cuda_me.lefts_gpu);
+	cudaFree(cm->cuda_me.rights_gpu);
+	cudaFree(cm->cuda_me.tops_gpu);
+	cudaFree(cm->cuda_me.bottoms_gpu);
 }
 
 struct c63_common* init_c63_enc(int width, int height)

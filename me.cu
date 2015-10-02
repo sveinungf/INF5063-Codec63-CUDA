@@ -258,27 +258,10 @@ void c63_motion_estimate(struct c63_common *cm)
 	cudaMemcpy(cm->cuda_me.refU_gpu, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.refV_gpu, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
 
-	int* vectors_x = new int[cm->mb_rows * cm->mb_cols];
-	int* vectors_y = new int[cm->mb_rows * cm->mb_cols];
 	int w = cm->padw[Y_COMPONENT];
 	int h = cm->padh[Y_COMPONENT];
 
 	/* Luma */
-	int *vector_x_gpu, *vector_y_gpu;
-	const int vector_size = cm->mb_rows*cm->mb_cols*sizeof(int);
-
-	cudaMalloc((void**) &vector_x_gpu, vector_size);
-	cudaMalloc((void**) &vector_y_gpu, vector_size);
-
-	int* lefts_gpu;
-	int* rights_gpu;
-	int* tops_gpu;
-	int* bottoms_gpu;
-	cudaMalloc((void**) &lefts_gpu, cm->mb_cols * sizeof(int));
-	cudaMalloc((void**) &rights_gpu, cm->mb_cols * sizeof(int));
-	cudaMalloc((void**) &tops_gpu, cm->mb_rows * sizeof(int));
-	cudaMalloc((void**) &bottoms_gpu, cm->mb_rows * sizeof(int));
-
 	int* lefts = new int[cm->mb_cols];
 	int* rights = new int[cm->mb_cols];
 	int* tops = new int[cm->mb_rows];
@@ -317,43 +300,34 @@ void c63_motion_estimate(struct c63_common *cm)
 	bottoms[cm->mb_rows-2] = h - 8;
 	bottoms[cm->mb_rows-1] = h - 8;
 
-	cudaMemcpy(lefts_gpu, lefts, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(rights_gpu, rights, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(tops_gpu, tops, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(bottoms_gpu, bottoms, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.lefts_gpu, lefts, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.rights_gpu, rights, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.tops_gpu, tops, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.bottoms_gpu, bottoms, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
 
 	dim3 numBlocks(cm->mb_cols, cm->mb_rows);
 	dim3 threadsPerBlock(32, 32);
-	me_block_8x8_gpu<<<numBlocks, threadsPerBlock>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, lefts_gpu, rights_gpu, tops_gpu, bottoms_gpu, cm->me_search_range, w, h, vector_x_gpu, vector_y_gpu);
+	me_block_8x8_gpu<<<numBlocks, threadsPerBlock>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.lefts_gpu, cm->cuda_me.rights_gpu, cm->cuda_me.tops_gpu, cm->cuda_me.bottoms_gpu, cm->me_search_range, w, h, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
 
 	delete[] lefts;
 	delete[] rights;
 	delete[] tops;
 	delete[] bottoms;
-	cudaFree(lefts_gpu);
-	cudaFree(rights_gpu);
-	cudaFree(tops_gpu);
-	cudaFree(bottoms_gpu);
 
-	cudaMemcpy(vectors_x, vector_x_gpu, vector_size, cudaMemcpyDeviceToHost);
-	cudaMemcpy(vectors_y, vector_y_gpu, vector_size, cudaMemcpyDeviceToHost);
-
-	cudaFree(vector_x_gpu);
-	cudaFree(vector_y_gpu);
+	const int vector_size = cm->mb_rows*cm->mb_cols*sizeof(int);
+	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_size, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_size, cudaMemcpyDeviceToHost);
 
 	for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
 		{
 			macroblock *mb = &cm->curframe->mbs[Y_COMPONENT][mb_y * w / 8 + mb_x];
-			mb->mv_x = vectors_x[mb_y * cm->mb_cols + mb_x];
-			mb->mv_y = vectors_y[mb_y * cm->mb_cols + mb_x];
+			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_cols + mb_x];
+			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_cols + mb_x];
 			mb->use_mv = 1;
 		}
 	}
-
-	delete[] vectors_x;
-	delete[] vectors_y;
 
 	/* Chroma */
 	for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)

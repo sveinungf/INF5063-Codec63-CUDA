@@ -97,8 +97,16 @@ struct cuda_data_me
 	uint8_t* refU_gpu;
 	uint8_t* refV_gpu;
 
-	int* block_sads_gpu;
-	int* block_sads;
+	int* vector_x;
+	int* vector_y;
+
+	int* vector_x_gpu;
+	int* vector_y_gpu;
+
+	int* lefts_gpu;
+	int* rights_gpu;
+	int* tops_gpu;
+	int* bottoms_gpu;
 };
 
 struct c63_common
