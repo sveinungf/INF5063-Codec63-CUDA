@@ -3,6 +3,31 @@
 
 #define ISQRT2 0.70710678118654f
 
+
+__constant__ float a1[64] =
+{
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	ISQRT2,   1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f
+};
+
+__constant__ float a2[64] =
+{
+	ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2, ISQRT2,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,
+	  1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f,   1.0f,  1.0f
+};
+
 #include <inttypes.h>
 
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
