@@ -75,11 +75,22 @@ void dequantize_end(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_d
 __host__ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, int y,
 		uint8_t *out_data, int quantization)
 {
-	int x;
-	for(x = 0; x < w; x += 8) {
-		dequant_idct_block_8x8(in_data + (x * 8), gpu_out_16 + (x * 8), quantization);
-	}
+	int numBlocks = 16;
+	int pixelsPerBlock = 64;
+	int pixelsPerRow = w * 8;
+	int restBlocks = (pixelsPerRow % (numBlocks * pixelsPerBlock))/pixelsPerBlock;
 
+	dim3 threadsPerBlock(8, 8);
+
+	int x;
+	/*
+	for (x = 0; x < pixelsPerRow; x += numBlocks*pixelsPerBlock) {
+		dequant_idct_block_8x8<<<numBlocks, threadsPerBlock>>>(in_data + x, gpu_out_16 + x, quantization);
+	}
+	dequant_idct_block_8x8<<<restBlocks, threadsPerBlock>>>(in_data + (pixelsPerRow - (restBlocks*pixelsPerBlock)), gpu_out_16 + (pixelsPerRow - (restBlocks*pixelsPerBlock)), quantization);
+	 */
+
+	dequant_idct_block_8x8<<<44, threadsPerBlock>>>(in_data, gpu_out_16, quantization);
 
 	int16_t block[w*8];
 	cudaMemcpy(block, gpu_out_16, w*8*sizeof(int16_t), cudaMemcpyDeviceToHost);
@@ -129,37 +140,6 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint
 __host__ void dct_quantize_row(int16_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data,
 		int quantization)
 {
-	//int16_t row[w*8];
-	//int num_blocks_8x8 = w / 64;
-	//int num_rest_blocks = w % 64 / 8;
-	//printf("num_blocks: %d  - rest_blocks: %d \n", num_blocks_8x8, num_rest_blocks);
-	/*
-	// Perform the DCT and quantization
-	int x;
-	for (x = 0; x < w; x += 8)
-	{
-		int i, j;
-
-		for (i = 0; i < 8; ++i)
-		{
-			for (j = 0; j < 8; ++j)
-			{
-				row[i * 8 + j + x * 8] = ((int16_t) in_data[i * w + j + x] - prediction[i * w + j + x]);
-			}
-		}
-	}
-
-	cudaMemcpy(gpu_frame1, &row, w*8*sizeof(int16_t), cudaMemcpyHostToDevice);
-	*/
-	/*int numBlocks = 1;
-	dim3 threadsPerBlock(8,8);
-
-	int x;
-	for (x = 0; x < w; x += 8) {
-		dct_quant_block_8x8<<<numBlocks, threadsPerBlock>>>(in_data + (x * 8), out_data + (x * 8), quantization);
-	}
-	*/
-
 	int numBlocks = 16;
 	int pixelsPerBlock = 64;
 	int pixelsPerRow = w * 8;
