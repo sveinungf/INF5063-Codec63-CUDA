@@ -293,9 +293,11 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.vector_y_gpu);
 
 	cudaFree(cm->cuda_me.leftsY_gpu);
+	cudaFree(cm->cuda_me.leftsUV_gpu);
 	cudaFree(cm->cuda_me.rightsY_gpu);
 	cudaFree(cm->cuda_me.rightsUV_gpu);
 	cudaFree(cm->cuda_me.topsY_gpu);
+	cudaFree(cm->cuda_me.topsUV_gpu);
 	cudaFree(cm->cuda_me.bottomsY_gpu);
 	cudaFree(cm->cuda_me.bottomsUV_gpu);
 }
