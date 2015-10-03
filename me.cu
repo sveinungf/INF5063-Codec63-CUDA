@@ -84,61 +84,6 @@ static void first_min_occurrence(int i, int* values, int value, int* result)
 	}
 }
 
-__global__
-static void min_sad_block_index(uint8_t* orig_block, uint8_t* ref_search_range, int stride, int range_width, int range_height, int* index_result)
-{
-	int i = threadIdx.x;
-	int j = threadIdx.y;
-
-	__shared__ uint8_t shared_orig_block[64];
-
-	if (i < 8 && j < 8)
-	{
-		shared_orig_block[i*8 + j] = orig_block[i*stride + j];
-	}
-
-	__syncthreads();
-
-	int result;
-
-	if (j < range_height && i < range_width)
-	{
-		uint8_t* ref_block = ref_search_range + j*stride + i;
-		result = 0;
-
-		for (int y = 0; y < 8; ++y)
-		{
-			for (int x = 0; x < 8; ++x)
-			{
-				result += abs(ref_block[y*stride + x] - shared_orig_block[y*8 + x]);
-			}
-		}
-	}
-	else
-	{
-		result = INT_MAX;
-	}
-
-	__shared__ int block_sads[1024];
-
-	int k = j*blockDim.x + i;
-	block_sads[k] = result;
-
-	__syncthreads();
-
-	min_reduce<1024>(k, block_sads);
-
-	if (k == 0) {
-		*index_result = INT_MAX;
-	}
-
-	__syncthreads();
-
-	if (result == block_sads[0]) {
-		atomicMin(index_result, k);
-	}
-}
-
 template<int range>
 __global__
 static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int* lefts, int* rights, int* tops, int* bottoms, int w, int* vector_x, int* vector_y)
@@ -220,76 +165,6 @@ static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int* lefts, in
 		vector_x[orig_mb_id] = left + (index_result % max_range_width) - mx;
 		vector_y[orig_mb_id] = top + (index_result / max_range_width) - my;
 	}
-}
-
-/* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y, uint8_t *orig_gpu, uint8_t *ref_gpu, int color_component)
-{
-	struct macroblock *mb = &cm->curframe->mbs[color_component][mb_y * cm->padw[color_component] / 8 + mb_x];
-
-	int range = cm->me_search_range;
-
-	/* Quarter resolution for chroma channels. */
-	if (color_component > 0)
-	{
-		range /= 2;
-	}
-
-	int left = mb_x * 8 - range;
-	int top = mb_y * 8 - range;
-	int right = mb_x * 8 + range;
-	int bottom = mb_y * 8 + range;
-
-	int w = cm->padw[color_component];
-	int h = cm->padh[color_component];
-
-	/* Make sure we are within bounds of reference frame. TODO: Support partial
-	 frame bounds. */
-	if (left < 0)
-	{
-		left = 0;
-	}
-	if (top < 0)
-	{
-		top = 0;
-	}
-	if (right > (w - 8))
-	{
-		right = w - 8;
-	}
-	if (bottom > (h - 8))
-	{
-		bottom = h - 8;
-	}
-
-	int mx = mb_x * 8;
-	int my = mb_y * 8;
-
-	int range_width = right - left;
-	int range_height = bottom - top;
-
-	uint8_t* orig_block_gpu = orig_gpu + my * w + mx;
-	uint8_t* ref_search_range_gpu = ref_gpu + top*w + left;
-
-	int result;
-
-	int* result_gpu;
-	cudaMalloc((void**) &result_gpu, sizeof(int));
-
-	int numBlocks = 1;
-	dim3 threadsPerBlock(32, 32);
-	min_sad_block_index<<<numBlocks, threadsPerBlock>>>(orig_block_gpu, ref_search_range_gpu, w, range_width, range_height, result_gpu);
-	cudaMemcpy(&result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
-
-	mb->mv_x = left + (result%32) - mx;
-	mb->mv_y = top + (result/32) - my;
-
-	cudaFree(result_gpu);
-
-	/* Here, there should be a threshold on SAD that checks if the motion vector
-	 is cheaper than intraprediction. We always assume MV to be beneficial */
-
-	mb->use_mv = 1;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
