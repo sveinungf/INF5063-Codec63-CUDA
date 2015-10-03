@@ -1,4 +1,4 @@
-CC = nvcc -lineinfo
+CC = nvcc -lineinfo -rdc=true
 #NVCC = nvcc -lineinfo
 CFLAGS = -O3 -pg #-Wall -pg -DSHOW_CYCLES
 LDFLAGS = -lm
