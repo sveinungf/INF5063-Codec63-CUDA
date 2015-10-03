@@ -176,17 +176,27 @@ static void me_block_8x8_gpu(uint8_t* orig_gpu, uint8_t* ref_gpu, int* lefts, in
 	const int range_width = right - left;
 	const int range_height = bottom - top;
 
+	const int shifts = (i % 4) * 8;
+
+	// (i/4)*4 rounds i down to the nearest integer divisible by 4
+	uint8_t* ref_block_top_row_aligned = ref_search_range + j*w + (i/4)*4;
+
 	if (j < range_height && i < range_width)
 	{
-		uint8_t* ref_block = ref_search_range + j*w + i;
 		block_sad = 0;
 
 		for (int y = 0; y < 8; ++y)
 		{
-			for (int x = 0; x < 8; ++x)
-			{
-				block_sad += abs(ref_block[y*w + x] - shared_orig_block[y*8 + x]);
-			}
+			uint32_t* ref_block_row_aligned = (uint32_t*) (ref_block_top_row_aligned + y*w);
+			uint32_t ref_row_left = (ref_block_row_aligned[0] >> shifts) | (ref_block_row_aligned[1] << 32-shifts);
+			uint32_t ref_row_right = (ref_block_row_aligned[1] >> shifts) | (ref_block_row_aligned[2] << 32-shifts);
+
+			uint8_t* orig_block_row = shared_orig_block + y*8;
+			uint32_t orig_row_left = *((uint32_t*) orig_block_row);
+			uint32_t orig_row_right = *((uint32_t*) orig_block_row + 1);
+
+			block_sad += __vsadu4(ref_row_left, orig_row_left);
+			block_sad += __vsadu4(ref_row_right, orig_row_right);
 		}
 	}
 
