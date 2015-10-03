@@ -146,10 +146,11 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 
 static void set_cuda_searchrange_boundaries(c63_common* cm)
 {
-	int wY = cm->padw[Y_COMPONENT];
 	int hY = cm->padh[Y_COMPONENT];
-	int wUV = cm->padw[U_COMPONENT];
 	int hUV = cm->padh[U_COMPONENT];
+
+	int wY = cm->padw[Y_COMPONENT];
+	int wUV = cm->padw[U_COMPONENT];
 
 	int* leftsY = new int[cm->mb_cols];
 	int* leftsUV = new int[cm->mb_cols/2];
@@ -160,44 +161,43 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 	int* bottomsY = new int[cm->mb_rows];
 	int* bottomsUV = new int[cm->mb_rows/2];
 
-	// LEFTS
-	leftsY[0] = 0;
-	leftsY[1] = 0;
-	leftsY[2] = 0;
-	for (int i = 3; i < cm->mb_cols; ++i) {
-		leftsY[i] = (i-2)*8; // TODO: hardcoded 2 since range is 16
+	for (int mb_x = 0; mb_x < cm->mb_cols; ++mb_x) {
+		leftsY[mb_x] = mb_x*8 - 16;
+		rightsY[mb_x] = mb_x*8 + 16;
+
+		if (leftsY[mb_x] < 0) {
+			leftsY[mb_x] = 0;
+		}
+
+		if (rightsY[mb_x] > (wY - 8)) {
+			rightsY[mb_x] = wY - 8;
+		}
 	}
 
 	for (int mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x) {
 		leftsUV[mb_x] = mb_x*8 - 8;
+		rightsUV[mb_x] = mb_x*8 + 8;
 
 		if (leftsUV[mb_x] < 0) {
 			leftsUV[mb_x] = 0;
 		}
-	}
-
-	// RIGHTS
-	for (int i = 0; i < cm->mb_cols-3; ++i) {
-		rightsY[i] = (i+2)*8;
-	}
-	rightsY[cm->mb_cols-3] = wY - 8;
-	rightsY[cm->mb_cols-2] = wY - 8;
-	rightsY[cm->mb_cols-1] = wY - 8;
-
-	for (int mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x) {
-		rightsUV[mb_x] = mb_x*8 + 8;
 
 		if (rightsUV[mb_x] > (wUV - 8)) {
 			rightsUV[mb_x] = wUV - 8;
 		}
 	}
 
-	// TOPS
-	topsY[0] = 0;
-	topsY[1] = 0;
-	topsY[2] = 0;
-	for (int i = 3; i < cm->mb_rows; ++i) {
-		topsY[i] = (i-2)*8;
+	for (int mb_y = 0; mb_y < cm->mb_rows; ++mb_y) {
+		topsY[mb_y] = mb_y * 8 - 16;
+		bottomsY[mb_y] = mb_y * 8 + 16;
+
+		if (topsY[mb_y] < 0) {
+			topsY[mb_y] = 0;
+		}
+
+		if (bottomsY[mb_y] > (hY - 8)) {
+			bottomsY[mb_y] = hY - 8;
+		}
 	}
 
 	for (int mb_y = 0; mb_y < cm->mb_rows/2; ++mb_y) {
@@ -212,14 +212,6 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 			bottomsUV[mb_y] = hUV - 8;
 		}
 	}
-
-	// BOTTOMS
-	for (int i = 0; i < cm->mb_rows-3; ++i) {
-		bottomsY[i] = (i+2)*8;
-	}
-	bottomsY[cm->mb_rows-3] = hY - 8;
-	bottomsY[cm->mb_rows-2] = hY - 8;
-	bottomsY[cm->mb_rows-1] = hY - 8;
 
 	cudaMemcpy(cm->cuda_me.leftsY_gpu, leftsY, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.leftsUV_gpu, leftsUV, cm->mb_cols/2 * sizeof(int), cudaMemcpyHostToDevice);
