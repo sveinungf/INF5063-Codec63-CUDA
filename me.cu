@@ -310,11 +310,12 @@ void c63_motion_estimate(struct c63_common *cm)
 	cudaMemcpy(cm->cuda_me.refV_gpu, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
 
 	int wY = cm->padw[Y_COMPONENT];
+	int wU = cm->padw[U_COMPONENT];
 
 	/* Luma */
 	dim3 numBlocksY(cm->mb_cols, cm->mb_rows);
 	dim3 threadsPerBlockY(32, 32);
-	me_block_8x8_gpu<16><<<numBlocksY, threadsPerBlockY>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.lefts_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.tops_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
+	me_block_8x8_gpu<16><<<numBlocksY, threadsPerBlockY>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.leftsY_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.topsY_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
 
 	const int vector_sizeY = cm->mb_rows*cm->mb_cols*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeY, cudaMemcpyDeviceToHost);
@@ -332,11 +333,29 @@ void c63_motion_estimate(struct c63_common *cm)
 	}
 
 	/* Chroma */
+	dim3 numBlocksU(cm->mb_cols/2, cm->mb_rows/2);
+	dim3 threadsPerBlockU(16, 16);
+	me_block_8x8_gpu<8><<<numBlocksU, threadsPerBlockU>>>(cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wU, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
+
+	const int vector_sizeU = (cm->mb_rows/2)*(cm->mb_cols/2)*sizeof(int);
+	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeU, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeU, cudaMemcpyDeviceToHost);
+
+	for (mb_y = 0; mb_y < cm->mb_rows/2; ++mb_y)
+	{
+		for (mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x)
+		{
+			macroblock *mb = &cm->curframe->mbs[U_COMPONENT][mb_y * wU / 8 + mb_x];
+			mb->mv_x = cm->cuda_me.vector_x[mb_y * (cm->mb_cols/2) + mb_x];
+			mb->mv_y = cm->cuda_me.vector_y[mb_y * (cm->mb_cols/2) + mb_x];
+			mb->use_mv = 1;
+		}
+	}
+
 	for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
 	{
 		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, U_COMPONENT);
 			me_block_8x8(cm, mb_x, mb_y, cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, V_COMPONENT);
 		}
 	}

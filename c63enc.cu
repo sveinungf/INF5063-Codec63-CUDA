@@ -151,19 +151,29 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 	int wUV = cm->padw[U_COMPONENT];
 	int hUV = cm->padh[U_COMPONENT];
 
-	int* lefts = new int[cm->mb_cols];
+	int* leftsY = new int[cm->mb_cols];
+	int* leftsUV = new int[cm->mb_cols/2];
 	int* rightsY = new int[cm->mb_cols];
-	int* rightsUV = new int[cm->mb_cols];
-	int* tops = new int[cm->mb_rows];
+	int* rightsUV = new int[cm->mb_cols/2];
+	int* topsY = new int[cm->mb_rows];
+	int* topsUV = new int[cm->mb_rows/2];
 	int* bottomsY = new int[cm->mb_rows];
-	int* bottomsUV = new int[cm->mb_rows];
+	int* bottomsUV = new int[cm->mb_rows/2];
 
 	// LEFTS
-	lefts[0] = 0;
-	lefts[1] = 0;
-	lefts[2] = 0;
+	leftsY[0] = 0;
+	leftsY[1] = 0;
+	leftsY[2] = 0;
 	for (int i = 3; i < cm->mb_cols; ++i) {
-		lefts[i] = (i-2)*8; // TODO: hardcoded 2 since range is 16
+		leftsY[i] = (i-2)*8; // TODO: hardcoded 2 since range is 16
+	}
+
+	for (int mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x) {
+		leftsUV[mb_x] = mb_x*8 - 8;
+
+		if (leftsUV[mb_x] < 0) {
+			leftsUV[mb_x] = 0;
+		}
 	}
 
 	// RIGHTS
@@ -174,20 +184,33 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 	rightsY[cm->mb_cols-2] = wY - 8;
 	rightsY[cm->mb_cols-1] = wY - 8;
 
-	for (int i = 0; i < cm->mb_cols/2-3; ++i) {
-		rightsUV[i] = (i+2)*8;
+	for (int mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x) {
+		rightsUV[mb_x] = mb_x*8 + 8;
+
+		if (rightsUV[mb_x] > (wUV - 8)) {
+			rightsUV[mb_x] = wUV - 8;
+		}
 	}
-	rightsUV[cm->mb_cols/2-3] = wUV - 8;
-	rightsUV[cm->mb_cols/2-2] = wUV - 8;
-	rightsUV[cm->mb_cols/2-1] = wUV - 8;
 
 	// TOPS
-	tops[0] = 0;
-	tops[1] = 0;
-	tops[2] = 0;
-
+	topsY[0] = 0;
+	topsY[1] = 0;
+	topsY[2] = 0;
 	for (int i = 3; i < cm->mb_rows; ++i) {
-		tops[i] = (i-2)*8;
+		topsY[i] = (i-2)*8;
+	}
+
+	for (int mb_y = 0; mb_y < cm->mb_rows/2; ++mb_y) {
+		topsUV[mb_y] = mb_y * 8 - 8;
+		bottomsUV[mb_y] = mb_y * 8 + 8;
+
+		if (topsUV[mb_y] < 0) {
+			topsUV[mb_y] = 0;
+		}
+
+		if (bottomsUV[mb_y] > (hUV - 8)) {
+			bottomsUV[mb_y] = hUV - 8;
+		}
 	}
 
 	// BOTTOMS
@@ -198,24 +221,21 @@ static void set_cuda_searchrange_boundaries(c63_common* cm)
 	bottomsY[cm->mb_rows-2] = hY - 8;
 	bottomsY[cm->mb_rows-1] = hY - 8;
 
-	for (int i = 0; i < cm->mb_rows/2-3; ++i) {
-		bottomsUV[i] = (i+2)*8;
-	}
-	bottomsUV[cm->mb_rows/2-3] = hUV - 8;
-	bottomsUV[cm->mb_rows/2-2] = hUV - 8;
-	bottomsUV[cm->mb_rows/2-1] = hUV - 8;
-
-	cudaMemcpy(cm->cuda_me.lefts_gpu, lefts, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.leftsY_gpu, leftsY, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.leftsUV_gpu, leftsUV, cm->mb_cols/2 * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.rightsY_gpu, rightsY, cm->mb_cols * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.rightsUV_gpu, rightsUV, cm->mb_cols/2 * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.tops_gpu, tops, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.topsY_gpu, topsY, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.topsUV_gpu, topsUV, cm->mb_rows/2 * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.bottomsY_gpu, bottomsY, cm->mb_rows * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.bottomsUV_gpu, bottomsUV, cm->mb_rows/2 * sizeof(int), cudaMemcpyHostToDevice);
 
-	delete[] lefts;
+	delete[] leftsY;
+	delete[] leftsUV;
 	delete[] rightsY;
 	delete[] rightsUV;
-	delete[] tops;
+	delete[] topsY;
+	delete[] topsUV;
 	delete[] bottomsY;
 	delete[] bottomsUV;
 }
@@ -244,12 +264,14 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->vector_x_gpu), vector_size);
 	cudaMalloc((void**) &(cuda_me->vector_y_gpu), vector_size);
 
-	cudaMalloc((void**) &(cuda_me->lefts_gpu), cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_cols * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), (cm->mb_cols/2) * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_cols * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->rightsUV_gpu), cm->mb_cols * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->tops_gpu), cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->rightsUV_gpu), (cm->mb_cols/2) * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->topsY_gpu), cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->topsUV_gpu), (cm->mb_rows/2) * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rows * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rows * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), (cm->mb_rows/2) * sizeof(int));
 
 	set_cuda_searchrange_boundaries(cm);
 }
@@ -270,10 +292,10 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.vector_x_gpu);
 	cudaFree(cm->cuda_me.vector_y_gpu);
 
-	cudaFree(cm->cuda_me.lefts_gpu);
+	cudaFree(cm->cuda_me.leftsY_gpu);
 	cudaFree(cm->cuda_me.rightsY_gpu);
 	cudaFree(cm->cuda_me.rightsUV_gpu);
-	cudaFree(cm->cuda_me.tops_gpu);
+	cudaFree(cm->cuda_me.topsY_gpu);
 	cudaFree(cm->cuda_me.bottomsY_gpu);
 	cudaFree(cm->cuda_me.bottomsUV_gpu);
 }
