@@ -311,6 +311,7 @@ void c63_motion_estimate(struct c63_common *cm)
 
 	int wY = cm->padw[Y_COMPONENT];
 	int wU = cm->padw[U_COMPONENT];
+	int wV = cm->padw[V_COMPONENT];
 
 	/* Luma */
 	dim3 numBlocksY(cm->mb_cols, cm->mb_rows);
@@ -352,11 +353,22 @@ void c63_motion_estimate(struct c63_common *cm)
 		}
 	}
 
-	for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
+	dim3 numBlocksV(cm->mb_cols/2, cm->mb_rows/2);
+	dim3 threadsPerBlockV(16, 16);
+	me_block_8x8_gpu<8><<<numBlocksV, threadsPerBlockV>>>(cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wV, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
+
+	const int vector_sizeV = (cm->mb_rows/2)*(cm->mb_cols/2)*sizeof(int);
+	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeV, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeV, cudaMemcpyDeviceToHost);
+
+	for (mb_y = 0; mb_y < cm->mb_rows/2; ++mb_y)
 	{
-		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
+		for (mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x)
 		{
-			me_block_8x8(cm, mb_x, mb_y, cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, V_COMPONENT);
+			macroblock *mb = &cm->curframe->mbs[V_COMPONENT][mb_y * wV / 8 + mb_x];
+			mb->mv_x = cm->cuda_me.vector_x[mb_y * (cm->mb_cols/2) + mb_x];
+			mb->mv_y = cm->cuda_me.vector_y[mb_y * (cm->mb_cols/2) + mb_x];
+			mb->use_mv = 1;
 		}
 	}
 }
