@@ -144,7 +144,7 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   ++cm->frames_since_keyframe;
 }
 
-static void set_cuda_searchrange_boundaries(c63_common* cm)
+static void set_searchrange_boundaries_cuda(c63_common* cm)
 {
 	int hY = cm->padh[Y_COMPONENT];
 	int hUV = cm->padh[U_COMPONENT];
@@ -265,7 +265,7 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rows * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), (cm->mb_rows/2) * sizeof(int));
 
-	set_cuda_searchrange_boundaries(cm);
+	set_searchrange_boundaries_cuda(cm);
 }
 
 static void cleanup_cuda_data(c63_common* cm)
