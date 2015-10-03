@@ -12,19 +12,46 @@ extern "C" {
 #include "common.h"
 #include "dsp.h"
 
-void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, int y,
-		uint8_t *out_data, uint8_t *quantization)
+int16_t *gpu_frame1_16;
+int16_t *gpu_frame2_16;
+int16_t *gpu_out_16;
+
+uint8_t *gpu_in_8;
+uint8_t *gpu_prediction_8;
+
+void cuda_init(int width, int height){
+	cudaMalloc(&gpu_frame1_16, width*height*sizeof(int16_t));
+	cudaMalloc(&gpu_frame2_16, width*height*sizeof(int16_t));
+	cudaMalloc(&gpu_out_16, width*height*sizeof(int16_t));
+
+	cudaMalloc(&gpu_in_8, width*height*sizeof(uint8_t));
+	cudaMalloc(&gpu_prediction_8, width*height*sizeof(uint8_t));
+}
+
+void cuda_cleanup() {
+	cudaFree(gpu_frame1_16);
+	cudaFree(gpu_frame2_16);
+	cudaFree(gpu_out_16);
+
+	cudaFree(gpu_in_8);
+	cudaFree(gpu_prediction_8);
+}
+
+__host__ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, int y,
+		uint8_t *out_data, int quantization)
 {
 	int x;
+	for(x = 0; x < w; x += 8) {
+		dequant_idct_block_8x8(in_data + (x * 8), gpu_out_16 + (x * 8), quantization);
+	}
 
-	int16_t block[8 * 8];
+	int16_t block[w*8];
+	cudaMemcpy(block, gpu_out_16, w*8*sizeof(int16_t), cudaMemcpyDeviceToHost);
 
 	/* Perform the dequantization and iDCT */
 	for (x = 0; x < w; x += 8)
 	{
 		int i, j;
-
-		dequant_idct_block_8x8(in_data + (x * 8), block, quantization);
 
 		for (i = 0; i < 8; ++i)
 		{
@@ -32,7 +59,7 @@ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, in
 			{
 				/* Add prediction block. Note: DCT is not precise -
 				 Clamp to legal values */
-				int16_t tmp = block[i * 8 + j] + (int16_t) prediction[i * w + j + x];
+				int16_t tmp = block[i * 8 + j + x * 8] + (int16_t) prediction[i * w + j + x];
 
 				if (tmp < 0)
 				{
@@ -50,25 +77,29 @@ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, in
 }
 
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		uint8_t *out_data, uint8_t *quantization)
+		uint8_t *out_data, int quantization)
 {
 	unsigned int y;
 
+	cudaMemcpy(gpu_frame1_16, in_data, width*height*sizeof(int16_t), cudaMemcpyHostToDevice);
+
 	for (y = 0; y < height; y += 8)
 	{
-		dequantize_idct_row(in_data + y * width, prediction + y * width, width, height, y,
+		dequantize_idct_row(gpu_frame1_16 + y * width, prediction + y * width, width, height, y,
 				out_data + y * width, quantization);
 	}
 }
 
-void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data,
-		uint8_t *quantization)
+__host__ void dct_quantize_row(int16_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data,
+		int quantization)
 {
+	/*int16_t row[w*8];
+	/*int num_blocks_8x8 = w / 64;
+	int num_rest_blocks = w % 64;
+	printf("num_blocks: %d  - rest_blocks: %d \n", num_blocks_8x8, num_rest_blocks);
+
+	// Perform the DCT and quantization
 	int x;
-
-	int16_t block[8 * 8];
-
-	/* Perform the DCT and quantization */
 	for (x = 0; x < w; x += 8)
 	{
 		int i, j;
@@ -77,27 +108,62 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h, int16
 		{
 			for (j = 0; j < 8; ++j)
 			{
-				block[i * 8 + j] = ((int16_t) in_data[i * w + j + x] - prediction[i * w + j + x]);
+				row[i * 8 + j + x * 8] = ((int16_t) in_data[i * w + j + x] - prediction[i * w + j + x]);
 			}
 		}
+	}
 
-		/* Store MBs linear in memory, i.e. the 64 coefficients are stored
-		 continous. This allows us to ignore stride in DCT/iDCT and other
-		 functions. */
-		dct_quant_block_8x8(block, out_data + (x * 8), quantization);
+	cudaMemcpy(gpu_frame1, &row, w*8*sizeof(int16_t), cudaMemcpyHostToDevice);
+	*/
+	int x;
+	for (x = 0; x < w; x += 8) {
+		dct_quant_block_8x8(in_data + (x * 8), out_data + (x * 8), quantization);
 	}
 }
 
+ __global__ void setup_data(uint8_t *in_data, uint8_t *prediction, int16_t *out_data, int w, int h) {
+		/* Perform the DCT and quantization */
+	 	int i = threadIdx.y;
+	 	int j = threadIdx.x;
+
+		int x;
+		for (x = 0; x < w; x += 8)
+		{
+			//int i, j;
+
+			//for (i = 0; i < 8; ++i)
+			//{
+				//for (j = 0; j < 8; ++j)
+				//{
+					out_data[i * 8 + j + x * 8] = ((int16_t) in_data[i * w + j + x] - prediction[i * w + j + x]);
+				//}
+			//}
+		}
+}
+
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		int16_t *out_data, uint8_t *quantization)
+		int16_t *out_data, int quantization)
 {
 	unsigned int y;
+	cudaMemcpy(gpu_in_8, in_data, width*height*sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(gpu_prediction_8, prediction, width*height*sizeof(uint8_t), cudaMemcpyHostToDevice);
+	//cudaMemcpy(gpu_frame1_16, &frame, gpu_predictionwidth*height*sizeof(int16_t), cudaMemcpyHostToDevice);
+
+	int numBlocks = 1;
+	dim3 threadsPerBlock(8, 8);
+
+	int16_t frame[width*height];
+	for (y = 0; y < height; y += 8) {
+		setup_data<<<numBlocks, threadsPerBlock>>>(gpu_in_8 + y * width, gpu_prediction_8 + y * width, gpu_frame1_16 + y * width, width, height);
+	}
+	//cudaMemcpy(gpu_frame1_16, &frame, width*height*sizeof(int16_t), cudaMemcpyHostToDevice);
 
 	for (y = 0; y < height; y += 8)
 	{
-		dct_quantize_row(in_data + y * width, prediction + y * width, width, height,
-				out_data + y * width, quantization);
+		dct_quantize_row(gpu_frame1_16 + y * width, prediction + y * width, width, height,
+				gpu_out_16 + y * width, quantization);
 	}
+	cudaMemcpy(out_data, gpu_out_16, width*height*sizeof(int16_t), cudaMemcpyDeviceToHost);
 }
 
 void destroy_frame(struct frame *f)

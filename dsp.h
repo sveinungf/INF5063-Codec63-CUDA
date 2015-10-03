@@ -6,14 +6,11 @@
 #include <inttypes.h>
 
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-    uint8_t *quant_tbl);
+    int quant_index);
 
 void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-    uint8_t *quant_tbl);
+    int quant_index);
 
 void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result);
-
-void cuda_init();
-void cuda_cleanup();
 
 #endif  /* C63_DSP_H_ */
