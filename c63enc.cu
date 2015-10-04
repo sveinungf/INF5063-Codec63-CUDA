@@ -318,7 +318,7 @@ struct c63_common* init_c63_enc(int width, int height)
    i.e., quantization factor should be 25, search range should be 16, and the
    keyframe interval should be 100. */
   cm->qp = 25;                  // Constant quantization factor. Range: [1..50]
-  cm->me_search_range = 16;     // Pixels in every direction
+  //cm->me_search_range = 16;   // This is now defined in c63.h
   cm->keyframe_interval = 100;  // Distance between keyframes
 
   /* Initialize quantization tables */

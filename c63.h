@@ -25,6 +25,10 @@
 #define VX 1
 #define VY 1
 
+// Motion estimation search range, pixels in every direction
+#define ME_RANGE_Y 16
+#define ME_RANGE_UV (ME_RANGE_Y/2)
+
 /* The JPEG file format defines several parts and each part is defined by a
  marker. A file always starts with 0xFF and is then followed by a magic number,
  e.g., like 0xD8 in the SOI marker below. Some markers have a payload, and if
