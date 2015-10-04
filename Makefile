@@ -52,6 +52,8 @@ gprof:
 	gprof c63enc gmon.out -b
 gprof-file:
 	gprof c63enc gmon.out > temp/gprof-result.txt
+nvprof:
+	nvprof ./c63enc -w 352 -h 288 -o temp/test.c63 yuv/foreman.yuv
 
 psnr:
 	./tools/yuv-tools/ycbcr.py psnr yuv/foreman.yuv 352 288 IYUV yuv/test.yuv
