@@ -162,8 +162,8 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	int* bottomsUV = new int[cm->mb_rowsUV];
 
 	for (int mb_x = 0; mb_x < cm->mb_colsY; ++mb_x) {
-		leftsY[mb_x] = mb_x*8 - 16;
-		rightsY[mb_x] = mb_x*8 + 16;
+		leftsY[mb_x] = mb_x * 8 - ME_RANGE_Y;
+		rightsY[mb_x] = mb_x * 8 + ME_RANGE_Y;
 
 		if (leftsY[mb_x] < 0) {
 			leftsY[mb_x] = 0;
@@ -175,8 +175,8 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	}
 
 	for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x) {
-		leftsUV[mb_x] = mb_x*8 - 8;
-		rightsUV[mb_x] = mb_x*8 + 8;
+		leftsUV[mb_x] = mb_x * 8 - ME_RANGE_UV;
+		rightsUV[mb_x] = mb_x * 8 + ME_RANGE_UV;
 
 		if (leftsUV[mb_x] < 0) {
 			leftsUV[mb_x] = 0;
@@ -188,8 +188,8 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	}
 
 	for (int mb_y = 0; mb_y < cm->mb_rowsY; ++mb_y) {
-		topsY[mb_y] = mb_y * 8 - 16;
-		bottomsY[mb_y] = mb_y * 8 + 16;
+		topsY[mb_y] = mb_y * 8 - ME_RANGE_Y;
+		bottomsY[mb_y] = mb_y * 8 + ME_RANGE_Y;
 
 		if (topsY[mb_y] < 0) {
 			topsY[mb_y] = 0;
@@ -201,8 +201,8 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	}
 
 	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y) {
-		topsUV[mb_y] = mb_y * 8 - 8;
-		bottomsUV[mb_y] = mb_y * 8 + 8;
+		topsUV[mb_y] = mb_y * 8 - ME_RANGE_UV;
+		bottomsUV[mb_y] = mb_y * 8 + ME_RANGE_UV;
 
 		if (topsUV[mb_y] < 0) {
 			topsUV[mb_y] = 0;
