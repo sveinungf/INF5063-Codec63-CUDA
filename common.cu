@@ -153,9 +153,9 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
 
 	f->mbs[Y_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY,
 			sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY / 2 * cm->mb_colsY / 2,
+	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV,
 			sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY / 2 * cm->mb_colsY / 2,
+	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV,
 			sizeof(struct macroblock));
 
 	return f;

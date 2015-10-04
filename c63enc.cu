@@ -153,13 +153,13 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	int wUV = cm->padw[U_COMPONENT];
 
 	int* leftsY = new int[cm->mb_colsY];
-	int* leftsUV = new int[cm->mb_colsY/2];
+	int* leftsUV = new int[cm->mb_colsUV];
 	int* rightsY = new int[cm->mb_colsY];
-	int* rightsUV = new int[cm->mb_colsY/2];
+	int* rightsUV = new int[cm->mb_colsUV];
 	int* topsY = new int[cm->mb_rowsY];
-	int* topsUV = new int[cm->mb_rowsY/2];
+	int* topsUV = new int[cm->mb_rowsUV];
 	int* bottomsY = new int[cm->mb_rowsY];
-	int* bottomsUV = new int[cm->mb_rowsY/2];
+	int* bottomsUV = new int[cm->mb_rowsUV];
 
 	for (int mb_x = 0; mb_x < cm->mb_colsY; ++mb_x) {
 		leftsY[mb_x] = mb_x*8 - 16;
@@ -174,7 +174,7 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 		}
 	}
 
-	for (int mb_x = 0; mb_x < cm->mb_colsY/2; ++mb_x) {
+	for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x) {
 		leftsUV[mb_x] = mb_x*8 - 8;
 		rightsUV[mb_x] = mb_x*8 + 8;
 
@@ -200,7 +200,7 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 		}
 	}
 
-	for (int mb_y = 0; mb_y < cm->mb_rowsY/2; ++mb_y) {
+	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y) {
 		topsUV[mb_y] = mb_y * 8 - 8;
 		bottomsUV[mb_y] = mb_y * 8 + 8;
 
@@ -214,13 +214,13 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	}
 
 	cudaMemcpy(cm->cuda_me.leftsY_gpu, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.leftsUV_gpu, leftsUV, cm->mb_colsY/2 * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.leftsUV_gpu, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.rightsY_gpu, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.rightsUV_gpu, rightsUV, cm->mb_colsY/2 * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.rightsUV_gpu, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.topsY_gpu, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.topsUV_gpu, topsUV, cm->mb_rowsY/2 * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.topsUV_gpu, topsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_me.bottomsY_gpu, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.bottomsUV_gpu, bottomsUV, cm->mb_rowsY/2 * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_me.bottomsUV_gpu, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
 
 	delete[] leftsY;
 	delete[] leftsUV;
@@ -257,13 +257,13 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->vector_y_gpu), vector_size);
 
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), (cm->mb_colsY/2) * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_colsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->rightsUV_gpu), (cm->mb_colsY/2) * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->rightsUV_gpu), cm->mb_colsUV * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->topsY_gpu), cm->mb_rowsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->topsUV_gpu), (cm->mb_rowsY/2) * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->topsUV_gpu), cm->mb_rowsUV * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rowsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), (cm->mb_rowsY/2) * sizeof(int));
+	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rowsUV * sizeof(int));
 
 	set_searchrange_boundaries_cuda(cm);
 }
