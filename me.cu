@@ -186,41 +186,41 @@ void c63_motion_estimate(struct c63_common *cm)
 	const int wV = cm->padw[V_COMPONENT];
 
 	/* Luma */
-	dim3 numBlocksY(cm->mb_cols, cm->mb_rows);
+	dim3 numBlocksY(cm->mb_colsY, cm->mb_rowsY);
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
 	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.leftsY_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.topsY_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
 
-	const int vector_sizeY = cm->mb_rows*cm->mb_cols*sizeof(int);
+	const int vector_sizeY = cm->mb_rowsY*cm->mb_colsY*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeY, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeY, cudaMemcpyDeviceToHost);
 
-	for (int mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
+	for (int mb_y = 0; mb_y < cm->mb_rowsY; ++mb_y)
 	{
-		for (int mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
+		for (int mb_x = 0; mb_x < cm->mb_colsY; ++mb_x)
 		{
 			macroblock *mb = &cm->curframe->mbs[Y_COMPONENT][mb_y * wY / 8 + mb_x];
-			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_cols + mb_x];
-			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_cols + mb_x];
+			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_colsY + mb_x];
+			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_colsY + mb_x];
 			mb->use_mv = 1;
 		}
 	}
 
 	/* Chroma */
-	dim3 numBlocksUV(cm->mb_cols/2, cm->mb_rows/2);
+	dim3 numBlocksUV(cm->mb_colsUV, cm->mb_rowsUV);
 	dim3 threadsPerBlockUV(ME_RANGE_UV*2, ME_RANGE_UV*2);
 	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wU, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
 
-	const int vector_sizeUV = (cm->mb_rows/2)*(cm->mb_cols/2)*sizeof(int);
+	const int vector_sizeUV = cm->mb_rowsUV*cm->mb_colsUV*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 
-	for (int mb_y = 0; mb_y < cm->mb_rows/2; ++mb_y)
+	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y)
 	{
-		for (int mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x)
+		for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x)
 		{
 			macroblock *mb = &cm->curframe->mbs[U_COMPONENT][mb_y * wU / 8 + mb_x];
-			mb->mv_x = cm->cuda_me.vector_x[mb_y * (cm->mb_cols/2) + mb_x];
-			mb->mv_y = cm->cuda_me.vector_y[mb_y * (cm->mb_cols/2) + mb_x];
+			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_colsUV + mb_x];
+			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_colsUV + mb_x];
 			mb->use_mv = 1;
 		}
 	}
@@ -230,13 +230,13 @@ void c63_motion_estimate(struct c63_common *cm)
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 
-	for (int mb_y = 0; mb_y < cm->mb_rows/2; ++mb_y)
+	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y)
 	{
-		for (int mb_x = 0; mb_x < cm->mb_cols/2; ++mb_x)
+		for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x)
 		{
 			macroblock *mb = &cm->curframe->mbs[V_COMPONENT][mb_y * wV / 8 + mb_x];
-			mb->mv_x = cm->cuda_me.vector_x[mb_y * (cm->mb_cols/2) + mb_x];
-			mb->mv_y = cm->cuda_me.vector_y[mb_y * (cm->mb_cols/2) + mb_x];
+			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_colsUV + mb_x];
+			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_colsUV + mb_x];
 			mb->use_mv = 1;
 		}
 	}
@@ -276,18 +276,18 @@ void c63_motion_compensate(struct c63_common *cm)
 	int mb_x, mb_y;
 
 	/* Luma */
-	for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
+	for (mb_y = 0; mb_y < cm->mb_rowsY; ++mb_y)
 	{
-		for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
+		for (mb_x = 0; mb_x < cm->mb_colsY; ++mb_x)
 		{
 			mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
 		}
 	}
 
 	/* Chroma */
-	for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
+	for (mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y)
 	{
-		for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
+		for (mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x)
 		{
 			mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
 			mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);

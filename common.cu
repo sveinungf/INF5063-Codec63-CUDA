@@ -151,11 +151,11 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
 	f->residuals->Udct = (int16_t*) calloc(cm->upw * cm->uph, sizeof(int16_t));
 	f->residuals->Vdct = (int16_t*) calloc(cm->vpw * cm->vph, sizeof(int16_t));
 
-	f->mbs[Y_COMPONENT] = (macroblock*) calloc(cm->mb_rows * cm->mb_cols,
+	f->mbs[Y_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY,
 			sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rows / 2 * cm->mb_cols / 2,
+	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY / 2 * cm->mb_colsY / 2,
 			sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rows / 2 * cm->mb_cols / 2,
+	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY / 2 * cm->mb_colsY / 2,
 			sizeof(struct macroblock));
 
 	return f;
