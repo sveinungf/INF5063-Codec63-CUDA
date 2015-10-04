@@ -254,11 +254,9 @@ void read_interleaved_data(struct c63_common *cm)
 void parse_dqt(struct c63_common *cm)
 {
   int i;
-  uint16_t size;
-
-  size = (get_byte(cm->e_ctx.fp) << 8) | get_byte(cm->e_ctx.fp);
-  // Discard size
-  size = size; /* huh? */
+  // Size is not being used ATM, but we might want to use it in future version.
+  uint16_t size = (get_byte(cm->e_ctx.fp) << 8) | get_byte(cm->e_ctx.fp);
+  (void)size;  // Don't warn us about unused variable.
 
   for (i = 0; i < 3; ++i)
   {
@@ -289,9 +287,9 @@ void parse_sos(struct c63_common *cm)
 // Baseline DCT
 void parse_sof0(struct c63_common *cm)
 {
-  uint16_t size;
-  size = (get_byte(cm->e_ctx.fp) << 8) | get_byte(cm->e_ctx.fp);
-  size = size; // Discard size
+  // Size is not being used ATM, but we might want to use it in future version.
+  uint16_t size = (get_byte(cm->e_ctx.fp) << 8) | get_byte(cm->e_ctx.fp);
+  (void)size;  // Don't warn us about unused variable.
 
   uint8_t precision = get_byte(cm->e_ctx.fp);
 

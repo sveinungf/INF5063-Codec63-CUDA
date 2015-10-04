@@ -336,6 +336,12 @@ struct c63_common* init_c63_enc(int width, int height)
   return cm;
 }
 
+void free_c63_enc(struct c63_common* cm)
+{
+  destroy_frame(cm->curframe);
+  free(cm);
+}
+
 static void print_help()
 {
   printf("Usage: ./c63enc [options] input_file\n");
@@ -453,6 +459,7 @@ int main(int argc, char **argv)
 
   cleanup_cuda_data(cm);
 
+  free_c63_enc(cm);
   fclose(outfile);
   fclose(infile);
 
