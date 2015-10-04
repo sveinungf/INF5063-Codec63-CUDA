@@ -129,7 +129,7 @@ struct c63_common
 
   uint8_t qp;                         // Quality parameter
 
-  int me_search_range;
+  //int me_search_range;	// This is now defined in c63.h
 
   uint8_t quanttbl[COLOR_COMPONENTS][64];
 
