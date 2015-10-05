@@ -1,0 +1,34 @@
+digraph "source tree" {
+    overlap=scale;
+    size="8,10";
+    ratio="fill";
+    fontsize="16";
+    fontname="Helvetica";
+	clusterrank="local";
+	"c63enc.c" -> "tables.h"
+	"common.c" -> "dsp.h"
+	"io.c" -> "io.h"
+	"c63_write.c" -> "tables.h"
+	"c63dec.c" -> "tables.h"
+	"c63_write.c" -> "c63_write.h"
+	"c63enc.c" -> "c63_write.h"
+	"c63_write.c" -> "c63.h"
+	"c63dec.c" -> "c63.h"
+	"common.h" -> "c63.h"
+	"me.h" -> "c63.h"
+	"c63dec.c" -> "c63_write.h"
+	"c63enc.c" -> "c63.h"
+	"dsp.c" -> "dsp.h"
+	"c63_write.c" -> "io.h"
+	"io.h" -> "c63.h"
+	"me.c" -> "dsp.h"
+	"c63dec.c" -> "me.h"
+	"me.c" -> "me.h"
+	"dsp.c" -> "tables.h"
+	"c63dec.c" -> "io.h"
+	"common.c" -> "common.h"
+	"c63enc.c" -> "me.h"
+	"c63_write.h" -> "c63.h"
+	"c63enc.c" -> "common.h"
+	"c63dec.c" -> "common.h"
+}
