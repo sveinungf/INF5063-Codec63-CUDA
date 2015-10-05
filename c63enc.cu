@@ -89,6 +89,49 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
   return image;
 }
 
+int16_t *gpu_Y_16;
+uint8_t *gpu_Y_8;
+uint8_t *gpu_Y_pred;
+
+int16_t *gpu_U_16;
+uint8_t *gpu_U_8;
+uint8_t *gpu_U_pred;
+
+int16_t *gpu_V_16;
+uint8_t *gpu_V_8;
+uint8_t *gpu_V_pred;
+
+
+void cuda_c63init(int width, int height){
+	cudaMalloc(&gpu_Y_16, width*height*sizeof(int16_t));
+	cudaMalloc(&gpu_Y_8, width*height*sizeof(uint8_t));
+	cudaMalloc(&gpu_Y_pred, width*height*sizeof(uint8_t));
+
+
+	cudaMalloc(&gpu_U_16, width*height*sizeof(int16_t));
+	cudaMalloc(&gpu_U_8, width*height*sizeof(uint8_t));
+	cudaMalloc(&gpu_U_pred, width*height*sizeof(uint8_t));
+
+
+	cudaMalloc(&gpu_V_16, width*height*sizeof(int16_t));
+	cudaMalloc(&gpu_V_8, width*height*sizeof(uint8_t));
+	cudaMalloc(&gpu_V_pred, width*height*sizeof(uint8_t));
+}
+
+void cuda_c63cleanup() {
+	cudaFree(gpu_Y_16);
+	cudaFree(gpu_Y_8);
+	cudaFree(gpu_Y_pred);
+
+	cudaFree(gpu_U_16);
+	cudaFree(gpu_U_8);
+	cudaFree(gpu_U_pred);
+
+	cudaFree(gpu_V_16);
+	cudaFree(gpu_V_8);
+	cudaFree(gpu_V_pred);
+}
+
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 {
   /* Advance to next frame */
@@ -116,24 +159,37 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   }
 
   /* DCT and Quantization */
-  dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
+  cudaMemcpy(gpu_Y_8, image->Y, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_U_8, image->U, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_V_8, image->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+
+  cudaMemcpy(gpu_Y_pred, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_U_pred, cm->curframe->predicted->U, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_V_pred, cm->curframe->predicted->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+
+  dct_quantize(gpu_Y_8, gpu_Y_pred, cm->padw[Y_COMPONENT],
       cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
       Y_COMPONENT);
 
-  dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
+  dct_quantize(gpu_U_8, gpu_U_pred, cm->padw[U_COMPONENT],
       cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
       U_COMPONENT);
 
-  dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
+  dct_quantize(gpu_V_8, gpu_V_pred, cm->padw[V_COMPONENT],
       cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
       V_COMPONENT);
 
+  cudaMemcpy(gpu_Y_16, cm->curframe->residuals->Ydct, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_U_16, cm->curframe->residuals->Udct, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_V_16, cm->curframe->residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t), cudaMemcpyHostToDevice);
+
+
   /* Reconstruct frame for inter-prediction */
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
+  dequantize_idct(gpu_Y_16, gpu_Y_pred,
       cm->ypw, cm->yph, cm->curframe->recons->Y, Y_COMPONENT);
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
+  dequantize_idct(gpu_U_16, gpu_U_pred,
       cm->upw, cm->uph, cm->curframe->recons->U, U_COMPONENT);
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
+  dequantize_idct(gpu_V_16, gpu_V_pred,
       cm->vpw, cm->vph, cm->curframe->recons->V, V_COMPONENT);
 
   /* Function dump_image(), found in common.c, can be used here to check if the
@@ -181,6 +237,7 @@ struct c63_common* init_c63_enc(int width, int height)
   }
 
   cuda_init(width, height);
+  cuda_c63init(width, height);
 
   return cm;
 }
@@ -304,6 +361,7 @@ int main(int argc, char **argv)
   fclose(infile);
   
   cuda_cleanup();
+  cuda_c63cleanup();
   cudaDeviceReset();
 
   return EXIT_SUCCESS;
