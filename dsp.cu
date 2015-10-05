@@ -112,13 +112,13 @@ __shared__ float idct_macro_block[64];
 __shared__ float idct_macro_block2[64];
 
 
-__global__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index)
+__device__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int block_offset, int i, int j)
 {
-	int block_offset = blockIdx.x * 64;
+	/*int block_offset = blockIdx.x * 64;
 
 	int i = threadIdx.y;
 	int j = threadIdx.x;
-
+	*/
 	// Copy pixel to shared memory
 	dct_macro_block2[i*8+j] = in_data[block_offset + i*8+j];
 	__syncthreads();
@@ -156,22 +156,19 @@ __global__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int qua
 	dct_macro_block[i*8+j] = dct_macro_block2[i*8+j] * a1[i*8+j] * a2[i*8+j];
 	__syncthreads();
 
-	// Quantize
+	// Quantize and set value in out_data
 	dct = dct_macro_block[UV_indexes[i*8+j]];
-	dct_macro_block2[i*8+j] = (float) round((dct/4.0) / quant_table[quant_index*64 + i*8+j]);
-
-	// Set value in cuda_out_data
-	out_data[block_offset + i*8+j] = dct_macro_block2[i*8+j];
+	out_data[block_offset + i*8+j] = (float) round((dct/4.0) / quant_table[quant_index*64 + i*8+j]);
 }
 
 
-__global__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index)
+__device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int block_offset, int i, int j)
 {
-	int block_offset = blockIdx.x * 64;
+	/*int block_offset = blockIdx.x * 64;
 
 	int i = threadIdx.y;
 	int j = threadIdx.x;
-
+	 */
 	// Copy to shared memory
 	idct_macro_block[i*8+j] = in_data[block_offset + i*8+j];
 	__syncthreads();
@@ -208,11 +205,8 @@ __global__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int 
 	idct_macro_block2[i*8+j] = idct;
 	__syncthreads();
 
-	// Second transpose - mb = mb2
-	idct_macro_block[i*8+j] = idct_macro_block2[j*8+i];
-
-	// Copy to out_data
-	out_data[block_offset + i*8+j] = idct_macro_block[i*8+j];
+	// Second transpose - mb = mb2 - copy value to out_data
+	out_data[block_offset + i*8+j] = idct_macro_block2[j*8+i];
 }
 
 
