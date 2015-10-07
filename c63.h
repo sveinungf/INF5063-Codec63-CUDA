@@ -101,13 +101,23 @@ struct cuda_data_me
 	uint8_t* refU_gpu;
 	uint8_t* refV_gpu;
 
+	uint8_t* predY_gpu;
+	uint8_t* predU_gpu;
+	uint8_t* predV_gpu;
+
 	int* vector_x;
 	int* vector_y;
-	bool* use_mv;
+	int* use_mv;
 
-	int* vector_x_gpu;
-	int* vector_y_gpu;
-	bool* use_mv_gpu;
+	int* vector_xY_gpu;
+	int* vector_xU_gpu;
+	int* vector_xV_gpu;
+	int* vector_yY_gpu;
+	int* vector_yU_gpu;
+	int* vector_yV_gpu;
+	int* use_mvY_gpu;
+	int* use_mvU_gpu;
+	int* use_mvV_gpu;
 
 	int* leftsY_gpu;
 	int* leftsUV_gpu;
