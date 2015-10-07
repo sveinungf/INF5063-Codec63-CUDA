@@ -112,57 +112,54 @@ __shared__ float idct_macro_block[64];
 __shared__ float idct_macro_block2[64];
 
 
-__device__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int block_offset, int i, int j)
+__device__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int i, int j)
 {
-	/*int block_offset = blockIdx.x * 64;
-
-	int i = threadIdx.y;
-	int j = threadIdx.x;
-	*/
 	// Copy pixel to shared memory
-	dct_macro_block2[i*8+j] = in_data[block_offset + i*8+j];
+	dct_macro_block2[i*8+j] = in_data[i*8+j];
 	__syncthreads();
 
 
-	// First dct_1d - mb = mb2
+	// First dct_1d - mb = mb2 - and transpose
 	float dct = 0;
 	int k;
 	for (k = 0; k < 8; ++k) {
-		dct += dct_macro_block2[i*8+k] * dct_lookup[k*8+j];
+		dct += dct_macro_block2[j*8+k] * dct_lookup[k*8+i];
 	}
-	dct_macro_block[i*8+j] = dct;
+	__syncthreads();
+	dct_macro_block2[i*8+j] = dct;
 	__syncthreads();
 
 
 	// First transpose - mb2 = mb
-	dct_macro_block2[i*8+j] = dct_macro_block[j*8+i];
-	__syncthreads();
+	//dct_macro_block2[i*8+j] = dct_macro_block[j*8+i];
+	//__syncthreads();
 
 
-	// Second dct_1d - mb = mb2
+	// Second dct_1d - mb = mb2 - and transpose
 	dct = 0;
 	for (k = 0; k < 8; ++k) {
-		dct += dct_macro_block2[i*8+k] * dct_lookup[k*8+j];
+		dct += dct_macro_block2[j*8+k] * dct_lookup[k*8+i];
 	}
-	dct_macro_block[i*8+j] = dct;
-	__syncthreads();
+	//__syncthreads();
+	//dct_macro_block2[i*8+j] = dct;
+	//__syncthreads();
 
 
 	// Second transpose - mb2 = mb
-	dct_macro_block2[i*8+j] = dct_macro_block[j*8+i];
-	__syncthreads();
+	//dct_macro_block2[i*8+j] = dct_macro_block[j*8+i];
+	//__syncthreads();
 
 	// Scale
-	dct_macro_block[i*8+j] = dct_macro_block2[i*8+j] * a1[i*8+j] * a2[i*8+j];
+	dct_macro_block[i*8+j] = dct * a1[i*8+j] * a2[i*8+j];
 	__syncthreads();
 
 	// Quantize and set value in out_data
 	dct = dct_macro_block[UV_indexes[i*8+j]];
-	out_data[block_offset + i*8+j] = (float) round((dct/4.0) / quant_table[quant_index*64 + i*8+j]);
+	out_data[i*8+j] = (float) round((dct/4.0) / quant_table[quant_index*64 + i*8+j]);
 }
 
 
-__device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int block_offset, int i, int j)
+__device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int i, int j)
 {
 	/*int block_offset = blockIdx.x * 64;
 
@@ -170,7 +167,7 @@ __device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int 
 	int j = threadIdx.x;
 	 */
 	// Copy to shared memory
-	idct_macro_block[i*8+j] = in_data[block_offset + i*8+j];
+	idct_macro_block[i*8+j] = in_data[i*8+j];
 	__syncthreads();
 
 
@@ -187,26 +184,30 @@ __device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int 
 	float idct = 0;
 	int k;
 	for (k = 0; k < 8; ++k) {
-		idct += idct_macro_block[i*8+k] * dct_lookup[j*8+k];
+		idct += idct_macro_block[j*8+k] * dct_lookup[i*8+k];
 	}
-	idct_macro_block2[i*8+j] = idct;
+	__syncthreads();
+	idct_macro_block[i*8+j] = idct;
 	__syncthreads();
 
 
 	// First transpose - mb = mb2
-	idct_macro_block[i*8+j] = idct_macro_block2[j*8+i];
-	__syncthreads();
+	//idct_macro_block[i*8+j] = idct_macro_block2[j*8+i];
+	//__syncthreads();
 
 	// Second idct - mb2 = mb
 	idct = 0;
 	for (k = 0; k < 8; ++k) {
-		idct += idct_macro_block[i*8+k] * dct_lookup[j*8+k];
+		idct += idct_macro_block[j*8+k] * dct_lookup[i*8+k];
 	}
-	idct_macro_block2[i*8+j] = idct;
-	__syncthreads();
+	out_data[i*8+j] = idct;
+
+	//__syncthreads();
+	//idct_macro_block2[i*8+j] = idct;
+	//__syncthreads();
 
 	// Second transpose - mb = mb2 - copy value to out_data
-	out_data[block_offset + i*8+j] = idct_macro_block2[j*8+i];
+	//out_data[i*8+j] = idct_macro_block2[j*8+i];
 }
 
 
@@ -222,5 +223,173 @@ void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
 		{
 			*result += abs(block2[v * stride + u] - block1[v * stride + u]);
 		}
+	}
+}
+
+
+__device__ static void transpose_block(float *in_data, float *out_data)
+{
+	int i, j;
+
+	for (i = 0; i < 8; ++i)
+	{
+		for (j = 0; j < 8; ++j)
+		{
+			out_data[i * 8 + j] = in_data[j * 8 + i];
+		}
+	}
+}
+
+__device__ static void dct_1d(float *in_data, float *out_data)
+{
+	int i, j;
+
+	for (i = 0; i < 8; ++i)
+	{
+		float dct = 0;
+
+		for (j = 0; j < 8; ++j)
+		{
+			dct += in_data[j] * dct_lookup[j*8+i];
+		}
+
+		out_data[i] = dct;
+	}
+}
+
+__device__ static void idct_1d(float *in_data, float *out_data)
+{
+	int i, j;
+
+	for (i = 0; i < 8; ++i)
+	{
+		float idct = 0;
+
+		for (j = 0; j < 8; ++j)
+		{
+			idct += in_data[j] * dct_lookup[i*8+j];
+		}
+
+		out_data[i] = idct;
+	}
+}
+
+__device__ static void scale_block(float *in_data, float *out_data)
+{
+	/*
+	int i;
+	for(i = 0; i < 64; ++i) {
+		out_data[i] = in_data[i];
+	}
+	*/
+	in_data[0] *= ISQRT2 * ISQRT2;
+
+	in_data[1] *= ISQRT2;
+	in_data[2] *= ISQRT2;
+	in_data[3] *= ISQRT2;
+	in_data[4] *= ISQRT2;
+	in_data[5] *= ISQRT2;
+	in_data[6] *= ISQRT2;
+	in_data[7] *= ISQRT2;
+
+	in_data[8] *= ISQRT2;
+	in_data[16] *= ISQRT2;
+	in_data[24] *= ISQRT2;
+	in_data[32] *= ISQRT2;
+	in_data[40] *= ISQRT2;
+	in_data[48] *= ISQRT2;
+	in_data[56] *= ISQRT2;
+}
+
+__device__ static void quantize_block(float *in_data, float *out_data, int quant_index)
+{
+	int zigzag;
+
+	for (zigzag = 0; zigzag < 64; ++zigzag)
+	{
+		float dct = in_data[UV_indexes[zigzag]];
+
+		/* Zig-zag and quantize */
+		out_data[zigzag] = (float) round((dct / 4.0) / quant_table[quant_index*64 + zigzag]);
+	}
+}
+
+__device__ static void dequantize_block(float *in_data, float *out_data, int quant_index)
+{
+	int zigzag;
+
+	for (zigzag = 0; zigzag < 64; ++zigzag)
+	{
+		// Dequantize
+		float dct = in_data[zigzag];
+
+		/* Zig-zag and de-quantize */
+		out_data[UV_indexes[zigzag]] = (float) round((dct * quant_table[quant_index*64 + zigzag]) / 4.0);
+	}
+}
+
+__device__ void dct2_quant_block_8x8(float *in_data, int16_t *out_data, int quant_index)
+{
+	float mb[8 * 8] __attribute((aligned(16)));
+	//float mb2[8 * 8] __attribute((aligned(16)));
+
+	int i, v;
+	/*
+	for (i = 0; i < 64; ++i)
+	{
+		mb2[i] = in_data[i];
+	}
+	 */
+	/* Two 1D DCT operations with transpose */
+	for (v = 0; v < 8; ++v)
+	{
+		dct_1d(in_data + v * 8, mb + v * 8);
+	}
+	transpose_block(mb, in_data);
+	for (v = 0; v < 8; ++v)
+	{
+		dct_1d(in_data + v * 8, mb + v * 8);
+	}
+	transpose_block(mb, in_data);
+
+	scale_block(in_data, mb);
+	quantize_block(in_data, mb, quant_index);
+
+	for (i = 0; i < 64; ++i)
+	{
+		out_data[i] = mb[i];
+	}
+}
+
+__device__ void dequant2_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index)
+{
+	float mb[8 * 8] __attribute((aligned(16)));
+	float mb2[8 * 8] __attribute((aligned(16)));
+
+	int i, v;
+
+	for (i = 0; i < 64; ++i)
+	{
+		mb[i] = in_data[i];
+	}
+
+	dequantize_block(mb, mb2, quant_index);
+	scale_block(mb2, mb);
+
+	/* Two 1D inverse DCT operations with transpose */
+	for (v = 0; v < 8; ++v)
+	{
+		idct_1d(mb + v * 8, mb2 + v * 8);
+	}
+	transpose_block(mb2, mb);
+	for (v = 0; v < 8; ++v)
+	{
+		idct_1d(mb + v * 8, mb2 + v * 8);
+	}
+	transpose_block(mb2, mb);
+
+	for (i = 0; i < 64; ++i)
+	{
+		out_data[i] = mb[i];
 	}
 }

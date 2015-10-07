@@ -168,21 +168,16 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   cudaMemcpy(gpu_V_8, image->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
 
   dct_quantize(gpu_Y_8, gpu_Y_pred, cm->padw[Y_COMPONENT],
-      cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
+      cm->padh[Y_COMPONENT], gpu_Y_16, cm->curframe->residuals->Ydct,
       Y_COMPONENT);
 
   dct_quantize(gpu_U_8, gpu_U_pred, cm->padw[U_COMPONENT],
-      cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
+      cm->padh[U_COMPONENT], gpu_U_16, cm->curframe->residuals->Udct,
       U_COMPONENT);
 
   dct_quantize(gpu_V_8, gpu_V_pred, cm->padw[V_COMPONENT],
-      cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
+      cm->padh[V_COMPONENT], gpu_V_16, cm->curframe->residuals->Vdct,
       V_COMPONENT);
-
-  cudaMemcpy(gpu_Y_16, cm->curframe->residuals->Ydct, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t), cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_U_16, cm->curframe->residuals->Udct, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t), cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_V_16, cm->curframe->residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t), cudaMemcpyHostToDevice);
-
 
   /* Reconstruct frame for inter-prediction */
   dequantize_idct(gpu_Y_16, gpu_Y_pred,

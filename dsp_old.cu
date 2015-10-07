@@ -22,16 +22,16 @@ __constant__ float dct_lookup[64] =
 
 
 
-float *gpu_frame1_16, *gpu_frame2_16;
+float *gpu_temp_16, *gpu_frame2_16;
 
 __host__ void cuda_init() {
 	
-	cudaMalloc(&gpu_frame1_16, 64*sizeof(float));
+	cudaMalloc(&gpu_temp_16, 64*sizeof(float));
 	cudaMalloc(&gpu_frame2_16, 64*sizeof(float));	
 }
 
 __host__ void cuda_cleanup() {
-	cudaFree(gpu_frame1_16);
+	cudaFree(gpu_temp_16);
 	cudaFree(gpu_frame2_16);
 }
 
@@ -51,7 +51,7 @@ __global__ void gpu_transpose_block(float *in_data, float *out_data)
 
 __host__ void transpose_block(float *in_data, float *out_data)
 {
-	gpu_transpose_block<<<1, 8>>>(gpu_frame1_16, gpu_frame2_16);
+	gpu_transpose_block<<<1, 8>>>(gpu_temp_16, gpu_frame2_16);
 	
 	
 	
@@ -261,7 +261,7 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 	dim3 threadsPerBlock(8, 8);
 	
 	
-	cudaMemcpy(gpu_frame1_16, (float*)&mb2, 64*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy(gpu_temp_16, (float*)&mb2, 64*sizeof(float), cudaMemcpyHostToDevice); 
 
 	/* Two 1D DCT operations with transpose */
 	/*
@@ -272,10 +272,10 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 		gpu_dct_1d<<<numBlocks, threadsPerBlock>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	* */
-	gpu_dct_1d<<<numBlocks, 8>>>(gpu_frame1_16, gpu_frame2_16);
+	gpu_dct_1d<<<numBlocks, 8>>>(gpu_temp_16, gpu_frame2_16);
 
 	//transpose_block(mb, mb2);
-	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_frame1_16);
+	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_temp_16);
 	
 	/*
 	for (v = 0; v < 8; ++v)
@@ -285,12 +285,12 @@ __host__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *
 		gpu_dct_1d<<<numBlocks, threadsPerBlock>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	* */
-	gpu_dct_1d<<<numBlocks, 8>>>(gpu_frame1_16, gpu_frame2_16);
+	gpu_dct_1d<<<numBlocks, 8>>>(gpu_temp_16, gpu_frame2_16);
 	
-	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_frame1_16);
+	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_temp_16);
 	//transpose_block(mb, mb2);
 	
-	cudaMemcpy((float*)&mb2, gpu_frame1_16, 64*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy((float*)&mb2, gpu_temp_16, 64*sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy((float*)&mb, gpu_frame2_16, 64*sizeof(float), cudaMemcpyDeviceToHost);
 
 	scale_block(mb2, mb);
@@ -317,7 +317,7 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 	dequantize_block(mb, mb2, quant_tbl);
 	scale_block(mb2, mb);
 	
-	cudaMemcpy(gpu_frame1_16, (float*)&mb, 64*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy(gpu_temp_16, (float*)&mb, 64*sizeof(float), cudaMemcpyHostToDevice); 
 	cudaMemcpy(gpu_frame2_16, (float*)&mb2, 64*sizeof(float), cudaMemcpyHostToDevice);
 	
 	int numBlocks = 1;
@@ -331,10 +331,10 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 		gpu_idct_1d<<<numBlocks, 8>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	* */
-	gpu_idct_1d<<<numBlocks, threadsPerBlock>>>(gpu_frame1_16, gpu_frame2_16);
+	gpu_idct_1d<<<numBlocks, threadsPerBlock>>>(gpu_temp_16, gpu_frame2_16);
 	
 	//transpose_block(mb2, mb);
-	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_frame1_16);
+	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_temp_16);
 	
 	/*
 	for (v = 0; v < 8; ++v)
@@ -343,13 +343,13 @@ __host__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_
 		gpu_idct_1d<<<numBlocks, 8>>>(gpu_in + v * 8, gpu_out + v * 8);
 	}
 	* */	
-	gpu_idct_1d<<<numBlocks, threadsPerBlock>>>(gpu_frame1_16, gpu_frame2_16);
+	gpu_idct_1d<<<numBlocks, threadsPerBlock>>>(gpu_temp_16, gpu_frame2_16);
 	
 	//transpose_block(mb2, mb);
-	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_frame1_16);
+	gpu_transpose_block<<<numBlocks, threadsPerBlock>>>(gpu_frame2_16, gpu_temp_16);
 
 	
-	cudaMemcpy((float*)&mb, gpu_frame1_16, 64*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy((float*)&mb, gpu_temp_16, 64*sizeof(float), cudaMemcpyDeviceToHost);
 	
 	for (i = 0; i < 64; ++i)
 	{
