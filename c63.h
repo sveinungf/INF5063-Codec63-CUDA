@@ -101,6 +101,10 @@ struct cuda_data_me
 	uint8_t* refU_gpu;
 	uint8_t* refV_gpu;
 
+	uint8_t* predY_gpu;
+	uint8_t* predU_gpu;
+	uint8_t* predV_gpu;
+
 	int* vector_x;
 	int* vector_y;
 	int* use_mv;

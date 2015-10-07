@@ -248,6 +248,10 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->refU_gpu), frame_size_U);
 	cudaMalloc((void**) &(cuda_me->refV_gpu), frame_size_V);
 
+	cudaMalloc((void**) &(cuda_me->predY_gpu), frame_size_Y);
+	cudaMalloc((void**) &(cuda_me->predU_gpu), frame_size_U);
+	cudaMalloc((void**) &(cuda_me->predV_gpu), frame_size_V);
+
 	cuda_me->vector_x = new int[cm->mb_rowsY * cm->mb_colsY];
 	cuda_me->vector_y = new int[cm->mb_rowsY * cm->mb_colsY];
 	cuda_me->use_mv = new int[cm->mb_rowsY * cm->mb_colsY];
@@ -283,6 +287,10 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.refY_gpu);
 	cudaFree(cm->cuda_me.refU_gpu);
 	cudaFree(cm->cuda_me.refV_gpu);
+
+	cudaFree(cm->cuda_me.predY_gpu);
+	cudaFree(cm->cuda_me.predU_gpu);
+	cudaFree(cm->cuda_me.predV_gpu);
 
 	delete[] cm->cuda_me.vector_x;
 	delete[] cm->cuda_me.vector_y;
