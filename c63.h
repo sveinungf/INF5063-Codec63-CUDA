@@ -105,9 +105,15 @@ struct cuda_data_me
 	int* vector_y;
 	bool* use_mv;
 
-	int* vector_x_gpu;
-	int* vector_y_gpu;
-	bool* use_mv_gpu;
+	int* vector_xY_gpu;
+	int* vector_xU_gpu;
+	int* vector_xV_gpu;
+	int* vector_yY_gpu;
+	int* vector_yU_gpu;
+	int* vector_yV_gpu;
+	bool* use_mvY_gpu;
+	bool* use_mvU_gpu;
+	bool* use_mvV_gpu;
 
 	int* leftsY_gpu;
 	int* leftsUV_gpu;
