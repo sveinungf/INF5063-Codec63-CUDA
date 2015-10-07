@@ -106,108 +106,70 @@ __constant__ uint8_t UV_indexes[64] =
 	53, 60, 61, 54, 47, 55, 62, 63,
 };
 
-__shared__ float dct_macro_block[64];
-__shared__ float dct_macro_block2[64];
-__shared__ float idct_macro_block[64];
-__shared__ float idct_macro_block2[64];
-
-
-__device__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int i, int j)
+__device__ void dct_quant_block_8x8(float* in_data, float *out_data, int quant_index, int i, int j)
 {
 	// Copy pixel to shared memory
-	dct_macro_block2[i*8+j] = in_data[i*8+j];
-	__syncthreads();
+	//dct_macro_block2[i*8+j] = in_data[i*8+j];
+	//__syncthreads();
 
 
 	// First dct_1d - mb = mb2 - and transpose
 	float dct = 0;
 	int k;
 	for (k = 0; k < 8; ++k) {
-		dct += dct_macro_block2[j*8+k] * dct_lookup[k*8+i];
+		dct += in_data[j*8+k] * dct_lookup[k*8+i];
 	}
 	__syncthreads();
-	dct_macro_block2[i*8+j] = dct;
+	in_data[i*8+j] = dct;
 	__syncthreads();
-
-
-	// First transpose - mb2 = mb
-	//dct_macro_block2[i*8+j] = dct_macro_block[j*8+i];
-	//__syncthreads();
-
 
 	// Second dct_1d - mb = mb2 - and transpose
 	dct = 0;
 	for (k = 0; k < 8; ++k) {
-		dct += dct_macro_block2[j*8+k] * dct_lookup[k*8+i];
+		dct += in_data[j*8+k] * dct_lookup[k*8+i];
 	}
-	//__syncthreads();
-	//dct_macro_block2[i*8+j] = dct;
-	//__syncthreads();
-
-
-	// Second transpose - mb2 = mb
-	//dct_macro_block2[i*8+j] = dct_macro_block[j*8+i];
-	//__syncthreads();
 
 	// Scale
-	dct_macro_block[i*8+j] = dct * a1[i*8+j] * a2[i*8+j];
+	out_data[i*8+j] = dct * a1[i*8+j] * a2[i*8+j];
 	__syncthreads();
 
 	// Quantize and set value in out_data
-	dct = dct_macro_block[UV_indexes[i*8+j]];
-	out_data[i*8+j] = (float) round((dct/4.0) / quant_table[quant_index*64 + i*8+j]);
+	dct = out_data[UV_indexes[i*8+j]];
+	in_data[i*8+j] = (float) round((dct/4.0) / quant_table[quant_index*64 + i*8+j]);
 }
 
 
-__device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int i, int j)
+__device__ void dequant_idct_block_8x8(float *in_data, float *out_data, int quant_index, int i, int j)
 {
-	/*int block_offset = blockIdx.x * 64;
-
-	int i = threadIdx.y;
-	int j = threadIdx.x;
-	 */
 	// Copy to shared memory
-	idct_macro_block[i*8+j] = in_data[i*8+j];
-	__syncthreads();
-
+	//idct_macro_block[i*8+j] = in_data[i*8+j];
+	//__syncthreads();
 
 	// Dequantize
-	float dct = idct_macro_block[i*8+j];
-	idct_macro_block2[UV_indexes[i*8+j]] = (float) round((dct*quant_table[quant_index*64 + i*8+j]) / 4.0f);
+	float dct = in_data[i*8+j];
+	out_data[UV_indexes[i*8+j]] = (float) round((dct*quant_table[quant_index*64 + i*8+j]) / 4.0f);
 	__syncthreads();
 
 	// Scale
-	idct_macro_block[i*8+j] = idct_macro_block2[i*8+j] * a1[i*8+j] * a2[i*8+j];
+	in_data[i*8+j] = out_data[i*8+j] * a1[i*8+j] * a2[i*8+j];
 	__syncthreads();
 
-	// First idct - mb2 = mb
+	// First idct - mb2 = mb - and transpose
 	float idct = 0;
 	int k;
 	for (k = 0; k < 8; ++k) {
-		idct += idct_macro_block[j*8+k] * dct_lookup[i*8+k];
+		idct += in_data[j*8+k] * dct_lookup[i*8+k];
 	}
 	__syncthreads();
-	idct_macro_block[i*8+j] = idct;
+	in_data[i*8+j] = idct;
 	__syncthreads();
 
-
-	// First transpose - mb = mb2
-	//idct_macro_block[i*8+j] = idct_macro_block2[j*8+i];
-	//__syncthreads();
-
-	// Second idct - mb2 = mb
+	// Second idct - mb2 = mb - and transpose
 	idct = 0;
 	for (k = 0; k < 8; ++k) {
-		idct += idct_macro_block[j*8+k] * dct_lookup[i*8+k];
+		idct += in_data[j*8+k] * dct_lookup[i*8+k];
 	}
 	out_data[i*8+j] = idct;
-
-	//__syncthreads();
-	//idct_macro_block2[i*8+j] = idct;
-	//__syncthreads();
-
-	// Second transpose - mb = mb2 - copy value to out_data
-	//out_data[i*8+j] = idct_macro_block2[j*8+i];
 }
 
 
@@ -276,12 +238,6 @@ __device__ static void idct_1d(float *in_data, float *out_data)
 
 __device__ static void scale_block(float *in_data, float *out_data)
 {
-	/*
-	int i;
-	for(i = 0; i < 64; ++i) {
-		out_data[i] = in_data[i];
-	}
-	*/
 	in_data[0] *= ISQRT2 * ISQRT2;
 
 	in_data[1] *= ISQRT2;

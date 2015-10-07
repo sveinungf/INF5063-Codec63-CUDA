@@ -5,10 +5,10 @@
 
 #include <inttypes.h>
 
-__device__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int i, int j);
+__device__ void dct_quant_block_8x8(float *in_data, float *out_data, int quant_index, int i, int j);
 __device__ void dct2_quant_block_8x8(float *in_data, int16_t *out_data, int quant_index);
 
-__device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index, int i, int j);
+__device__ void dequant_idct_block_8x8(float *in_data, float *out_data, int quant_index, int i, int j);
 __device__ void dequant2_idct_block_8x8(int16_t *in_data, int16_t *out_data, int quant_index);
 
 void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result);

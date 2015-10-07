@@ -18,6 +18,10 @@ extern "C" {
 #include "me.h"
 #include "dsp.h"
 
+__device__ uint8_t *YUV[COLOR_COMPONENTS];
+__device__ uint8_t *YUV_pred[COLOR_COMPONENTS];
+
+
 
 static char *output_file, *input_file;
 FILE *outfile;
@@ -102,20 +106,20 @@ uint8_t *gpu_V_8;
 uint8_t *gpu_V_pred;
 
 
-void cuda_c63init(int width, int height){
-	cudaMalloc(&gpu_Y_16, width*height*sizeof(int16_t));
-	cudaMalloc(&gpu_Y_8, width*height*sizeof(uint8_t));
-	cudaMalloc(&gpu_Y_pred, width*height*sizeof(uint8_t));
+void cuda_c63init(struct c63_common cm){
+	cudaMalloc(&gpu_Y_16, cm.padw[Y_COMPONENT]*cm.padh[Y_COMPONENT]*sizeof(int16_t));
+	cudaMalloc(&gpu_Y_8, cm.padw[Y_COMPONENT]*cm.padh[Y_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_Y_pred, cm.padw[Y_COMPONENT]*cm.padh[Y_COMPONENT]*sizeof(uint8_t));
 
 
-	cudaMalloc(&gpu_U_16, width*height*sizeof(int16_t));
-	cudaMalloc(&gpu_U_8, width*height*sizeof(uint8_t));
-	cudaMalloc(&gpu_U_pred, width*height*sizeof(uint8_t));
+	cudaMalloc(&gpu_U_16, cm.padw[U_COMPONENT]*cm.padh[U_COMPONENT]*sizeof(int16_t));
+	cudaMalloc(&gpu_U_8, cm.padw[U_COMPONENT]*cm.padh[U_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_U_pred, cm.padw[U_COMPONENT]*cm.padh[U_COMPONENT]*sizeof(uint8_t));
 
 
-	cudaMalloc(&gpu_V_16, width*height*sizeof(int16_t));
-	cudaMalloc(&gpu_V_8, width*height*sizeof(uint8_t));
-	cudaMalloc(&gpu_V_pred, width*height*sizeof(uint8_t));
+	cudaMalloc(&gpu_V_16, cm.padw[V_COMPONENT]*cm.padh[V_COMPONENT]*sizeof(int16_t));
+	cudaMalloc(&gpu_V_8, cm.padw[V_COMPONENT]*cm.padh[V_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_V_pred, cm.padw[V_COMPONENT]*cm.padh[V_COMPONENT]*sizeof(uint8_t));
 }
 
 void cuda_c63cleanup() {
@@ -181,11 +185,11 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 
   /* Reconstruct frame for inter-prediction */
   dequantize_idct(gpu_Y_16, gpu_Y_pred,
-      cm->ypw, cm->yph, cm->curframe->recons->Y, Y_COMPONENT);
+      cm->ypw, cm->yph, gpu_Y_8, cm->curframe->recons->Y, Y_COMPONENT);
   dequantize_idct(gpu_U_16, gpu_U_pred,
-      cm->upw, cm->uph, cm->curframe->recons->U, U_COMPONENT);
+      cm->upw, cm->uph, gpu_U_8, cm->curframe->recons->U, U_COMPONENT);
   dequantize_idct(gpu_V_16, gpu_V_pred,
-      cm->vpw, cm->vph, cm->curframe->recons->V, V_COMPONENT);
+      cm->vpw, cm->vph, gpu_V_8, cm->curframe->recons->V, V_COMPONENT);
 
   /* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
@@ -231,8 +235,8 @@ struct c63_common* init_c63_enc(int width, int height)
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
   }
 
-  cuda_init(width, height);
-  cuda_c63init(width, height);
+  //cuda_init(*cm);
+  cuda_c63init(*cm);
 
   return cm;
 }
@@ -355,7 +359,7 @@ int main(int argc, char **argv)
   fclose(outfile);
   fclose(infile);
   
-  cuda_cleanup();
+  //cuda_cleanup();
   cuda_c63cleanup();
   cudaDeviceReset();
 
