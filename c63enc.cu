@@ -88,12 +88,22 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
   return image;
 }
 
+static void zero_out_prediction(struct c63_common* cm)
+{
+	struct frame* frame = cm->curframe;
+	memset(frame->predicted->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
+	memset(frame->predicted->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
+	memset(frame->predicted->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
+}
+
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 {
-  /* Advance to next frame */
-  destroy_frame(cm->refframe);
+  // Advance to next frame by swapping current and reference frame
+  struct frame* temp = cm->refframe;
   cm->refframe = cm->curframe;
-  cm->curframe = create_frame(cm, image);
+  cm->curframe = temp;
+
+  cm->curframe->orig = image;
 
   /* Check if keyframe */
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -112,6 +122,12 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 
     /* Motion Compensation */
     c63_motion_compensate(cm);
+  }
+  else
+  {
+	// dct_quantize() expects zeroed out prediction buffers for key frames.
+	// We zero them out here since we reuse the buffers from previous frames.
+    zero_out_prediction(cm);
   }
 
   /* DCT and Quantization */
@@ -353,6 +369,9 @@ struct c63_common* init_c63_enc(int width, int height)
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
   }
 
+  cm->curframe = create_frame(cm);
+  cm->refframe = create_frame(cm);
+
   init_cuda_data(cm);
 
   return cm;
@@ -361,6 +380,7 @@ struct c63_common* init_c63_enc(int width, int height)
 void free_c63_enc(struct c63_common* cm)
 {
   destroy_frame(cm->curframe);
+  destroy_frame(cm->refframe);
   free(cm);
 }
 

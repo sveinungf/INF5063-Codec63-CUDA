@@ -130,11 +130,9 @@ void destroy_frame(struct frame *f)
 	free(f);
 }
 
-struct frame* create_frame(struct c63_common *cm, yuv_t *image)
+struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
-
-	f->orig = image;
 
 	f->recons = (yuv_t*) malloc(sizeof(yuv_t));
 	f->recons->Y = (uint8_t*) malloc(cm->ypw * cm->yph);
@@ -142,20 +140,20 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
 	f->recons->V = (uint8_t*) malloc(cm->vpw * cm->vph);
 
 	f->predicted = (yuv_t*) malloc(sizeof(yuv_t));
-	f->predicted->Y = (uint8_t*) calloc(cm->ypw * cm->yph, sizeof(uint8_t));
-	f->predicted->U = (uint8_t*) calloc(cm->upw * cm->uph, sizeof(uint8_t));
-	f->predicted->V = (uint8_t*) calloc(cm->vpw * cm->vph, sizeof(uint8_t));
+	f->predicted->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
+	f->predicted->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
+	f->predicted->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
 
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
-	f->residuals->Ydct = (int16_t*) calloc(cm->ypw * cm->yph, sizeof(int16_t));
-	f->residuals->Udct = (int16_t*) calloc(cm->upw * cm->uph, sizeof(int16_t));
-	f->residuals->Vdct = (int16_t*) calloc(cm->vpw * cm->vph, sizeof(int16_t));
+	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
+	f->residuals->Udct = (int16_t*) malloc(cm->upw * cm->uph * sizeof(int16_t));
+	f->residuals->Vdct = (int16_t*) malloc(cm->vpw * cm->vph * sizeof(int16_t));
 
-	f->mbs[Y_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY,
+	f->mbs[Y_COMPONENT] = (macroblock*) malloc(cm->mb_rowsY * cm->mb_colsY *
 			sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV,
+	f->mbs[U_COMPONENT] = (macroblock*) malloc(cm->mb_rowsUV * cm->mb_colsUV *
 			sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV,
+	f->mbs[V_COMPONENT] = (macroblock*) malloc(cm->mb_rowsUV * cm->mb_colsUV *
 			sizeof(struct macroblock));
 
 	return f;
