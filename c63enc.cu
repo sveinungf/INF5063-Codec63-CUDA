@@ -248,11 +248,9 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->refU_gpu), frame_size_U);
 	cudaMalloc((void**) &(cuda_me->refV_gpu), frame_size_V);
 
-	const int vector_size = cm->mb_rowsY*cm->mb_colsY*sizeof(int);
-
 	cuda_me->vector_x = new int[cm->mb_rowsY * cm->mb_colsY];
 	cuda_me->vector_y = new int[cm->mb_rowsY * cm->mb_colsY];
-	cuda_me->use_mv = new bool[cm->mb_rowsY * cm->mb_colsY];
+	cuda_me->use_mv = new int[cm->mb_rowsY * cm->mb_colsY];
 
 	cudaMalloc((void**) &(cuda_me->vector_xY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
 	cudaMalloc((void**) &(cuda_me->vector_xU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
@@ -260,9 +258,9 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->vector_yY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
 	cudaMalloc((void**) &(cuda_me->vector_yU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
 	cudaMalloc((void**) &(cuda_me->vector_yV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(bool));
-	cudaMalloc((void**) &(cuda_me->use_mvU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(bool));
-	cudaMalloc((void**) &(cuda_me->use_mvV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(bool));
+	cudaMalloc((void**) &(cuda_me->use_mvY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
+	cudaMalloc((void**) &(cuda_me->use_mvU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
+	cudaMalloc((void**) &(cuda_me->use_mvV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
 
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
