@@ -86,7 +86,7 @@ static void first_min_occurrence(int i, int* values, int value, int* result)
 
 template<int range>
 __global__
-static void me_block_8x8_gpu(uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, int* vector_x, int* vector_y)
+static void me_block_8x8_gpu(uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, int* vector_x, int* vector_y, bool* use_mv)
 {
 	const int i = threadIdx.x;
 	const int j = threadIdx.y;
@@ -162,6 +162,10 @@ static void me_block_8x8_gpu(uint8_t* orig, uint8_t* ref, int* lefts, int* right
 
 	if (ref_mb_id == 0)
 	{
+		/* Here, there should be a threshold on SAD that checks if the motion vector
+		     is cheaper than intraprediction. We always assume MV to be beneficial */
+		use_mv[orig_mb_id] = true;
+
 		vector_x[orig_mb_id] = left + (index_result % max_range_width) - mx;
 		vector_y[orig_mb_id] = top + (index_result / max_range_width) - my;
 	}
@@ -188,56 +192,71 @@ void c63_motion_estimate(struct c63_common *cm)
 	/* Luma */
 	dim3 numBlocksY(cm->mb_colsY, cm->mb_rowsY);
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
-	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.leftsY_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.topsY_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
+	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.leftsY_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.topsY_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu, cm->cuda_me.use_mv_gpu);
 
 	const int vector_sizeY = cm->mb_rowsY*cm->mb_colsY*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeY, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeY, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cm->cuda_me.use_mv, cm->cuda_me.use_mv_gpu, cm->mb_rowsY*cm->mb_colsY*sizeof(bool), cudaMemcpyDeviceToHost);
 
 	for (int mb_y = 0; mb_y < cm->mb_rowsY; ++mb_y)
 	{
 		for (int mb_x = 0; mb_x < cm->mb_colsY; ++mb_x)
 		{
-			macroblock *mb = &cm->curframe->mbs[Y_COMPONENT][mb_y * wY / 8 + mb_x];
-			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_colsY + mb_x];
-			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_colsY + mb_x];
-			mb->use_mv = 1;
+			int index = mb_y * cm->mb_colsY + mb_x;
+
+			if (cm->cuda_me.use_mv[index]) {
+				macroblock *mb = &cm->curframe->mbs[Y_COMPONENT][index];
+				mb->mv_x = cm->cuda_me.vector_x[index];
+				mb->mv_y = cm->cuda_me.vector_y[index];
+				mb->use_mv = 1;
+			}
 		}
 	}
 
 	/* Chroma */
 	dim3 numBlocksUV(cm->mb_colsUV, cm->mb_rowsUV);
 	dim3 threadsPerBlockUV(ME_RANGE_UV*2, ME_RANGE_UV*2);
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wU, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wU, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu, cm->cuda_me.use_mv_gpu);
 
 	const int vector_sizeUV = cm->mb_rowsUV*cm->mb_colsUV*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cm->cuda_me.use_mv, cm->cuda_me.use_mv_gpu, cm->mb_rowsUV*cm->mb_colsUV*sizeof(bool), cudaMemcpyDeviceToHost);
 
 	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y)
 	{
 		for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x)
 		{
-			macroblock *mb = &cm->curframe->mbs[U_COMPONENT][mb_y * wU / 8 + mb_x];
-			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_colsUV + mb_x];
-			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_colsUV + mb_x];
-			mb->use_mv = 1;
+			int index = mb_y * cm->mb_colsUV + mb_x;
+
+			if (cm->cuda_me.use_mv[index]) {
+				macroblock *mb = &cm->curframe->mbs[U_COMPONENT][index];
+				mb->mv_x = cm->cuda_me.vector_x[index];
+				mb->mv_y = cm->cuda_me.vector_y[index];
+				mb->use_mv = 1;
+			}
 		}
 	}
 
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wV, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wV, cm->cuda_me.vector_x_gpu, cm->cuda_me.vector_y_gpu, cm->cuda_me.use_mv_gpu);
 
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_x_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_y_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cm->cuda_me.use_mv, cm->cuda_me.use_mv_gpu, cm->mb_rowsUV*cm->mb_colsUV*sizeof(bool), cudaMemcpyDeviceToHost);
 
 	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y)
 	{
 		for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x)
 		{
-			macroblock *mb = &cm->curframe->mbs[V_COMPONENT][mb_y * wV / 8 + mb_x];
-			mb->mv_x = cm->cuda_me.vector_x[mb_y * cm->mb_colsUV + mb_x];
-			mb->mv_y = cm->cuda_me.vector_y[mb_y * cm->mb_colsUV + mb_x];
-			mb->use_mv = 1;
+			int index = mb_y * cm->mb_colsUV + mb_x;
+
+			if (cm->cuda_me.use_mv[index]) {
+				macroblock *mb = &cm->curframe->mbs[V_COMPONENT][index];
+				mb->mv_x = cm->cuda_me.vector_x[index];
+				mb->mv_y = cm->cuda_me.vector_y[index];
+				mb->use_mv = 1;
+			}
 		}
 	}
 }

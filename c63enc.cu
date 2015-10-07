@@ -252,9 +252,11 @@ static void init_cuda_data(c63_common* cm)
 
 	cuda_me->vector_x = new int[cm->mb_rowsY * cm->mb_colsY];
 	cuda_me->vector_y = new int[cm->mb_rowsY * cm->mb_colsY];
+	cuda_me->use_mv = new bool[cm->mb_rowsY * cm->mb_colsY];
 
 	cudaMalloc((void**) &(cuda_me->vector_x_gpu), vector_size);
 	cudaMalloc((void**) &(cuda_me->vector_y_gpu), vector_size);
+	cudaMalloc((void**) &(cuda_me->use_mv_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(bool));
 
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
