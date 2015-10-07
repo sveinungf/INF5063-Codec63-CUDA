@@ -299,20 +299,10 @@ void c63_motion_compensate(struct c63_common *cm)
 	uint8_t* predY_gpu;
 	uint8_t* predU_gpu;
 	uint8_t* predV_gpu;
-	uint8_t* refY_gpu;
-	uint8_t* refU_gpu;
-	uint8_t* refV_gpu;
 
 	cudaMalloc((void**) &predY_gpu, cm->ypw * cm->yph * sizeof(uint8_t));
 	cudaMalloc((void**) &predU_gpu, cm->upw * cm->uph * sizeof(uint8_t));
 	cudaMalloc((void**) &predV_gpu, cm->vpw * cm->vph * sizeof(uint8_t));
-	cudaMalloc((void**) &refY_gpu, cm->ypw * cm->yph * sizeof(uint8_t));
-	cudaMalloc((void**) &refU_gpu, cm->upw * cm->uph * sizeof(uint8_t));
-	cudaMalloc((void**) &refV_gpu, cm->vpw * cm->vph * sizeof(uint8_t));
-
-	cudaMemcpy(refY_gpu, cm->refframe->recons->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(refU_gpu, cm->refframe->recons->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(refV_gpu, cm->refframe->recons->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
 
 	int wY = cm->padw[Y_COMPONENT];
 	int wU = cm->padw[U_COMPONENT];
@@ -321,20 +311,17 @@ void c63_motion_compensate(struct c63_common *cm)
 	/* Luma */
 	// TODO: Number of macroblock rows are now limited to 1024. Number of threads per block should
 	// ideally be a multiplum of the warp size (32).
-	mc_block_8x8_gpu<<<cm->mb_colsY, cm->mb_rowsY>>>(wY, predY_gpu, refY_gpu, cm->cuda_me.vector_xY_gpu, cm->cuda_me.vector_yY_gpu, cm->cuda_me.use_mvY_gpu);
+	mc_block_8x8_gpu<<<cm->mb_colsY, cm->mb_rowsY>>>(wY, predY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.vector_xY_gpu, cm->cuda_me.vector_yY_gpu, cm->cuda_me.use_mvY_gpu);
 	cudaMemcpy(cm->curframe->predicted->Y, predY_gpu, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
 	/* Chroma */
-	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wU, predU_gpu, refU_gpu, cm->cuda_me.vector_xU_gpu, cm->cuda_me.vector_yU_gpu, cm->cuda_me.use_mvU_gpu);
+	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wU, predU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.vector_xU_gpu, cm->cuda_me.vector_yU_gpu, cm->cuda_me.use_mvU_gpu);
 	cudaMemcpy(cm->curframe->predicted->U, predU_gpu, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
-	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wV, predV_gpu, refV_gpu, cm->cuda_me.vector_xV_gpu, cm->cuda_me.vector_yV_gpu, cm->cuda_me.use_mvV_gpu);
+	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wV, predV_gpu, cm->cuda_me.refV_gpu, cm->cuda_me.vector_xV_gpu, cm->cuda_me.vector_yV_gpu, cm->cuda_me.use_mvV_gpu);
 	cudaMemcpy(cm->curframe->predicted->V, predV_gpu, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
 	cudaFree(predY_gpu);
 	cudaFree(predU_gpu);
 	cudaFree(predV_gpu);
-	cudaFree(refY_gpu);
-	cudaFree(refU_gpu);
-	cudaFree(refV_gpu);
 }
