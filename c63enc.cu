@@ -459,7 +459,7 @@ int main(int argc, char **argv)
 
 	# ifdef SHOW_CYCLES
 		uint64_t cycleCountBefore = rdtsc();
-		c63_encode_image(cm, image);
+		c63_encode_image(cm, image, image_gpu);
 		uint64_t cycleCountAfter = rdtsc();
 
 		uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
