@@ -32,13 +32,8 @@ extern char *optarg;
 
 // Temporary buffers
 int16_t *gpu_Y_16;
-uint8_t *gpu_Y_pred;
-
 int16_t *gpu_U_16;
-uint8_t *gpu_U_pred;
-
 int16_t *gpu_V_16;
-uint8_t *gpu_V_pred;
 
 // Get CPU cycle count
 uint64_t rdtsc(){
@@ -268,10 +263,6 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc(&gpu_U_16, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t));
 	cudaMalloc(&gpu_V_16, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t));
 
-	cudaMalloc(&gpu_Y_pred, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
-	cudaMalloc(&gpu_U_pred, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
-	cudaMalloc(&gpu_V_pred, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
-
 	set_searchrange_boundaries_cuda(cm);
 }
 
@@ -289,10 +280,6 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(gpu_Y_16);
 	cudaFree(gpu_U_16);
 	cudaFree(gpu_V_16);
-
-	cudaFree(gpu_Y_pred);
-	cudaFree(gpu_U_pred);
-	cudaFree(gpu_V_pred);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
