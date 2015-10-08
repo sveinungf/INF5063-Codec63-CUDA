@@ -139,12 +139,9 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 			V_COMPONENT);
 
 	/* Reconstruct frame for inter-prediction */
-	dequantize_idct(residuals->Ydct, predicted->Y,
-			cm->ypw, cm->yph, cm->curframe->recons_gpu->Y, cm->curframe->recons->Y, Y_COMPONENT);
-	dequantize_idct(residuals->Udct, predicted->U,
-			cm->upw, cm->uph, cm->curframe->recons_gpu->U, cm->curframe->recons->U, U_COMPONENT);
-	dequantize_idct(residuals->Vdct, predicted->V,
-			cm->vpw, cm->vph, cm->curframe->recons_gpu->V, cm->curframe->recons->V, V_COMPONENT);
+	dequantize_idct(residuals->Ydct, predicted->Y, cm->ypw, cm->yph, cm->curframe->recons_gpu->Y, Y_COMPONENT);
+	dequantize_idct(residuals->Udct, predicted->U, cm->upw, cm->uph, cm->curframe->recons_gpu->U, U_COMPONENT);
+	dequantize_idct(residuals->Vdct, predicted->V, cm->vpw, cm->vph, cm->curframe->recons_gpu->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */

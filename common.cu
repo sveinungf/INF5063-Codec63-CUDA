@@ -49,13 +49,12 @@ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, uint8_t *
 
 __host__
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		uint8_t *gpu_out_data, uint8_t *out_data, int quantization)
+		uint8_t *gpu_out_data, int quantization)
 {
 	dim3 threadsPerBlock(8, 8);
 	dim3 numBlocks(width/threadsPerBlock.x, height/threadsPerBlock.y);
 
 	dequantize_idct_row<<<numBlocks, threadsPerBlock>>>(in_data, prediction, width, gpu_out_data, quantization);
-	cudaMemcpy(out_data, gpu_out_data, width*height*sizeof(uint8_t), cudaMemcpyDeviceToHost);
 }
 
 
@@ -126,7 +125,6 @@ struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
 
-	f->recons = create_image(cm);
 	f->predicted = create_image(cm);
 
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
@@ -147,7 +145,6 @@ void destroy_frame(struct frame *f)
 {
 	deinit_frame_gpu(f);
 
-	destroy_image(f->recons);
 	destroy_image(f->predicted);
 
 	free(f->residuals->Ydct);
