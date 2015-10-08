@@ -318,11 +318,11 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.bottomsUV_gpu);
 }
 
-static void copy_image_to_gpu(yuv_t* image)
+static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image)
 {
-	cudaMemcpy(image->Y_gpu, image->Y, width * height * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image->U_gpu, image->U, width * height * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image->V_gpu, image->V, width * height * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image->Y_gpu, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image->U_gpu, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image->V_gpu, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
 }
 
 struct c63_common* init_c63_enc(int width, int height)
@@ -462,7 +462,7 @@ int main(int argc, char **argv)
 
     if (!ok) { break; }
 
-    copy_image_to_gpu(image);
+    copy_image_to_gpu(cm, image);
 
     printf("Encoding frame %d, ", numframes);
 
