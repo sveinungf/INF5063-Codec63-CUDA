@@ -173,17 +173,16 @@ static void me_block_8x8_gpu(uint8_t* orig, uint8_t* ref, int* lefts, int* right
 
 void c63_motion_estimate(struct c63_common *cm)
 {
+	yuv_t* orig = cm->curframe->orig_gpu;
+	yuv_t* ref = cm->refframe->recons_gpu;
+
 	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
 
-	cudaMemcpy(cm->cuda_me.origY_gpu, cm->curframe->orig->Y, frame_size_Y, cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.origU_gpu, cm->curframe->orig->U, frame_size_U, cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.origV_gpu, cm->curframe->orig->V, frame_size_V, cudaMemcpyHostToDevice);
-
-	cudaMemcpy(cm->cuda_me.refY_gpu, cm->refframe->recons->Y, frame_size_Y, cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.refU_gpu, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.refV_gpu, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
+	cudaMemcpy(ref->Y, cm->refframe->recons->Y, frame_size_Y, cudaMemcpyHostToDevice);
+	cudaMemcpy(ref->U, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
+	cudaMemcpy(ref->V, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
 
 	const int wY = cm->padw[Y_COMPONENT];
 	const int wU = cm->padw[U_COMPONENT];
@@ -192,7 +191,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	/* Luma */
 	dim3 numBlocksY(cm->mb_colsY, cm->mb_rowsY);
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
-	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY>>>(cm->cuda_me.origY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.leftsY_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.topsY_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_xY_gpu, cm->cuda_me.vector_yY_gpu, cm->cuda_me.use_mvY_gpu);
+	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY>>>(orig->Y, ref->Y, cm->cuda_me.leftsY_gpu, cm->cuda_me.rightsY_gpu, cm->cuda_me.topsY_gpu, cm->cuda_me.bottomsY_gpu, wY, cm->cuda_me.vector_xY_gpu, cm->cuda_me.vector_yY_gpu, cm->cuda_me.use_mvY_gpu);
 
 	const int vector_sizeY = cm->mb_rowsY*cm->mb_colsY*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_xY_gpu, vector_sizeY, cudaMemcpyDeviceToHost);
@@ -217,7 +216,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	/* Chroma */
 	dim3 numBlocksUV(cm->mb_colsUV, cm->mb_rowsUV);
 	dim3 threadsPerBlockUV(ME_RANGE_UV*2, ME_RANGE_UV*2);
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wU, cm->cuda_me.vector_xU_gpu, cm->cuda_me.vector_yU_gpu, cm->cuda_me.use_mvU_gpu);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(orig->U, ref->U, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wU, cm->cuda_me.vector_xU_gpu, cm->cuda_me.vector_yU_gpu, cm->cuda_me.use_mvU_gpu);
 
 	const int vector_sizeUV = cm->mb_rowsUV*cm->mb_colsUV*sizeof(int);
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_xU_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
@@ -239,7 +238,7 @@ void c63_motion_estimate(struct c63_common *cm)
 		}
 	}
 
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(cm->cuda_me.origV_gpu, cm->cuda_me.refV_gpu, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wV, cm->cuda_me.vector_xV_gpu, cm->cuda_me.vector_yV_gpu, cm->cuda_me.use_mvV_gpu);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV>>>(orig->V, ref->V, cm->cuda_me.leftsUV_gpu, cm->cuda_me.rightsUV_gpu, cm->cuda_me.topsUV_gpu, cm->cuda_me.bottomsUV_gpu, wV, cm->cuda_me.vector_xV_gpu, cm->cuda_me.vector_yV_gpu, cm->cuda_me.use_mvV_gpu);
 
 	cudaMemcpy(cm->cuda_me.vector_x, cm->cuda_me.vector_xV_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
 	cudaMemcpy(cm->cuda_me.vector_y, cm->cuda_me.vector_yV_gpu, vector_sizeUV, cudaMemcpyDeviceToHost);
@@ -296,6 +295,8 @@ static void mc_block_8x8_gpu(int w, uint8_t *predicted, uint8_t *ref, int* vecto
 
 void c63_motion_compensate(struct c63_common *cm)
 {
+	yuv_t* ref = cm->refframe->recons_gpu;
+
 	int wY = cm->padw[Y_COMPONENT];
 	int wU = cm->padw[U_COMPONENT];
 	int wV = cm->padw[V_COMPONENT];
@@ -303,13 +304,13 @@ void c63_motion_compensate(struct c63_common *cm)
 	/* Luma */
 	// TODO: Number of macroblock rows are now limited to 1024. Number of threads per block should
 	// ideally be a multiplum of the warp size (32).
-	mc_block_8x8_gpu<<<cm->mb_colsY, cm->mb_rowsY>>>(wY, cm->cuda_me.predY_gpu, cm->cuda_me.refY_gpu, cm->cuda_me.vector_xY_gpu, cm->cuda_me.vector_yY_gpu, cm->cuda_me.use_mvY_gpu);
+	mc_block_8x8_gpu<<<cm->mb_colsY, cm->mb_rowsY>>>(wY, cm->cuda_me.predY_gpu, ref->Y, cm->cuda_me.vector_xY_gpu, cm->cuda_me.vector_yY_gpu, cm->cuda_me.use_mvY_gpu);
 	cudaMemcpy(cm->curframe->predicted->Y, cm->cuda_me.predY_gpu, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
 	/* Chroma */
-	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wU, cm->cuda_me.predU_gpu, cm->cuda_me.refU_gpu, cm->cuda_me.vector_xU_gpu, cm->cuda_me.vector_yU_gpu, cm->cuda_me.use_mvU_gpu);
+	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wU, cm->cuda_me.predU_gpu, ref->U, cm->cuda_me.vector_xU_gpu, cm->cuda_me.vector_yU_gpu, cm->cuda_me.use_mvU_gpu);
 	cudaMemcpy(cm->curframe->predicted->U, cm->cuda_me.predU_gpu, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
-	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wV, cm->cuda_me.predV_gpu, cm->cuda_me.refV_gpu, cm->cuda_me.vector_xV_gpu, cm->cuda_me.vector_yV_gpu, cm->cuda_me.use_mvV_gpu);
+	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(wV, cm->cuda_me.predV_gpu, ref->V, cm->cuda_me.vector_xV_gpu, cm->cuda_me.vector_yV_gpu, cm->cuda_me.use_mvV_gpu);
 	cudaMemcpy(cm->curframe->predicted->V, cm->cuda_me.predV_gpu, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 }
