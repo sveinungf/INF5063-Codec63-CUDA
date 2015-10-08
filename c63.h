@@ -98,10 +98,6 @@ struct frame
 
 struct cuda_data_me
 {
-	uint8_t* predY_gpu;
-	uint8_t* predU_gpu;
-	uint8_t* predV_gpu;
-
 	int* leftsY_gpu;
 	int* leftsUV_gpu;
 	int* rightsY_gpu;

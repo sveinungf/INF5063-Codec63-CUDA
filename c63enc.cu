@@ -243,14 +243,6 @@ static void init_cuda_data(c63_common* cm)
 {
 	cuda_data_me* cuda_me = &(cm->cuda_me);
 
-	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
-	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
-	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
-
-	cudaMalloc((void**) &(cuda_me->predY_gpu), frame_size_Y);
-	cudaMalloc((void**) &(cuda_me->predU_gpu), frame_size_U);
-	cudaMalloc((void**) &(cuda_me->predV_gpu), frame_size_V);
-
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_colsY * sizeof(int));
@@ -265,10 +257,6 @@ static void init_cuda_data(c63_common* cm)
 
 static void cleanup_cuda_data(c63_common* cm)
 {
-	cudaFree(cm->cuda_me.predY_gpu);
-	cudaFree(cm->cuda_me.predU_gpu);
-	cudaFree(cm->cuda_me.predV_gpu);
-
 	cudaFree(cm->cuda_me.leftsY_gpu);
 	cudaFree(cm->cuda_me.leftsUV_gpu);
 	cudaFree(cm->cuda_me.rightsY_gpu);
