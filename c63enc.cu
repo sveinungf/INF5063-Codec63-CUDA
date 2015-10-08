@@ -247,31 +247,9 @@ static void init_cuda_data(c63_common* cm)
 	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
 	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
 
-	cudaMalloc((void**) &(cuda_me->origY_gpu), frame_size_Y);
-	cudaMalloc((void**) &(cuda_me->origU_gpu), frame_size_U);
-	cudaMalloc((void**) &(cuda_me->origV_gpu), frame_size_V);
-
-	cudaMalloc((void**) &(cuda_me->refY_gpu), frame_size_Y);
-	cudaMalloc((void**) &(cuda_me->refU_gpu), frame_size_U);
-	cudaMalloc((void**) &(cuda_me->refV_gpu), frame_size_V);
-
 	cudaMalloc((void**) &(cuda_me->predY_gpu), frame_size_Y);
 	cudaMalloc((void**) &(cuda_me->predU_gpu), frame_size_U);
 	cudaMalloc((void**) &(cuda_me->predV_gpu), frame_size_V);
-
-	cuda_me->vector_x = new int[cm->mb_rowsY * cm->mb_colsY];
-	cuda_me->vector_y = new int[cm->mb_rowsY * cm->mb_colsY];
-	cuda_me->use_mv = new int[cm->mb_rowsY * cm->mb_colsY];
-
-	cudaMalloc((void**) &(cuda_me->vector_xY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_xU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_xV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_yY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_yU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_yV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
 
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
@@ -287,31 +265,9 @@ static void init_cuda_data(c63_common* cm)
 
 static void cleanup_cuda_data(c63_common* cm)
 {
-	cudaFree(cm->cuda_me.origY_gpu);
-	cudaFree(cm->cuda_me.origU_gpu);
-	cudaFree(cm->cuda_me.origV_gpu);
-
-	cudaFree(cm->cuda_me.refY_gpu);
-	cudaFree(cm->cuda_me.refU_gpu);
-	cudaFree(cm->cuda_me.refV_gpu);
-
 	cudaFree(cm->cuda_me.predY_gpu);
 	cudaFree(cm->cuda_me.predU_gpu);
 	cudaFree(cm->cuda_me.predV_gpu);
-
-	delete[] cm->cuda_me.vector_x;
-	delete[] cm->cuda_me.vector_y;
-	delete[] cm->cuda_me.use_mv;
-
-	cudaFree(cm->cuda_me.vector_xY_gpu);
-	cudaFree(cm->cuda_me.vector_xU_gpu);
-	cudaFree(cm->cuda_me.vector_xV_gpu);
-	cudaFree(cm->cuda_me.vector_yY_gpu);
-	cudaFree(cm->cuda_me.vector_yU_gpu);
-	cudaFree(cm->cuda_me.vector_yV_gpu);
-	cudaFree(cm->cuda_me.use_mvY_gpu);
-	cudaFree(cm->cuda_me.use_mvU_gpu);
-	cudaFree(cm->cuda_me.use_mvV_gpu);
 
 	cudaFree(cm->cuda_me.leftsY_gpu);
 	cudaFree(cm->cuda_me.leftsUV_gpu);
