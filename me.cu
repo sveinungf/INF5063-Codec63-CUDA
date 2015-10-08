@@ -177,14 +177,6 @@ void c63_motion_estimate(struct c63_common *cm)
 	yuv_t* orig = cm->curframe->orig_gpu;
 	yuv_t* ref = cm->refframe->recons_gpu;
 
-	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
-	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
-	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
-
-	cudaMemcpy(ref->Y, cm->refframe->recons->Y, frame_size_Y, cudaMemcpyHostToDevice);
-	cudaMemcpy(ref->U, cm->refframe->recons->U, frame_size_U, cudaMemcpyHostToDevice);
-	cudaMemcpy(ref->V, cm->refframe->recons->V, frame_size_V, cudaMemcpyHostToDevice);
-
 	const int wY = cm->padw[Y_COMPONENT];
 	const int wU = cm->padw[U_COMPONENT];
 	const int wV = cm->padw[V_COMPONENT];

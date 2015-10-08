@@ -32,15 +32,12 @@ extern char *optarg;
 
 // Temporary buffers
 int16_t *gpu_Y_16;
-uint8_t *gpu_Y_8;
 uint8_t *gpu_Y_pred;
 
 int16_t *gpu_U_16;
-uint8_t *gpu_U_8;
 uint8_t *gpu_U_pred;
 
 int16_t *gpu_V_16;
-uint8_t *gpu_V_8;
 uint8_t *gpu_V_pred;
 
 // Get CPU cycle count
@@ -132,32 +129,30 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 		// dct_quantize() expects zeroed out prediction buffers for key frames.
 		// We zero them out here since we reuse the buffers from previous frames.
 		zero_out_prediction(cm);
-
-		//cudaMemcpy(cm->cuda_me.predY_gpu, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
-		//cudaMemcpy(cm->cuda_me.predU_gpu, cm->curframe->predicted->U, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
-		//cudaMemcpy(cm->cuda_me.predV_gpu, cm->curframe->predicted->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
 	}
 
+	yuv_t* predicted = cm->curframe->predicted_gpu;
+
 	/* DCT and Quantization */
-	dct_quantize(cm->curframe->orig_gpu->Y, cm->curframe->predicted_gpu->Y, cm->padw[Y_COMPONENT],
+	dct_quantize(cm->curframe->orig_gpu->Y, predicted->Y, cm->padw[Y_COMPONENT],
 			cm->padh[Y_COMPONENT], gpu_Y_16, cm->curframe->residuals->Ydct,
 			Y_COMPONENT);
 
-	dct_quantize(cm->curframe->orig_gpu->U, cm->curframe->predicted_gpu->U, cm->padw[U_COMPONENT],
+	dct_quantize(cm->curframe->orig_gpu->U, predicted->U, cm->padw[U_COMPONENT],
 			cm->padh[U_COMPONENT], gpu_U_16, cm->curframe->residuals->Udct,
 			U_COMPONENT);
 
-	dct_quantize(cm->curframe->orig_gpu->V, cm->curframe->predicted_gpu->V, cm->padw[V_COMPONENT],
+	dct_quantize(cm->curframe->orig_gpu->V, predicted->V, cm->padw[V_COMPONENT],
 			cm->padh[V_COMPONENT], gpu_V_16, cm->curframe->residuals->Vdct,
 			V_COMPONENT);
 
 	/* Reconstruct frame for inter-prediction */
-	dequantize_idct(gpu_Y_16, cm->curframe->predicted_gpu->Y,
-			cm->ypw, cm->yph, gpu_Y_8, cm->curframe->recons->Y, Y_COMPONENT);
-	dequantize_idct(gpu_U_16, cm->curframe->predicted_gpu->U,
-			cm->upw, cm->uph, gpu_U_8, cm->curframe->recons->U, U_COMPONENT);
-	dequantize_idct(gpu_V_16, cm->curframe->predicted_gpu->V,
-			cm->vpw, cm->vph, gpu_V_8, cm->curframe->recons->V, V_COMPONENT);
+	dequantize_idct(gpu_Y_16, predicted->Y,
+			cm->ypw, cm->yph, cm->curframe->recons_gpu->Y, cm->curframe->recons->Y, Y_COMPONENT);
+	dequantize_idct(gpu_U_16, predicted->U,
+			cm->upw, cm->uph, cm->curframe->recons_gpu->U, cm->curframe->recons->U, U_COMPONENT);
+	dequantize_idct(gpu_V_16, predicted->V,
+			cm->vpw, cm->vph, cm->curframe->recons_gpu->V, cm->curframe->recons->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
@@ -273,10 +268,6 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc(&gpu_U_16, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t));
 	cudaMalloc(&gpu_V_16, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t));
 
-	cudaMalloc(&gpu_Y_8, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
-	cudaMalloc(&gpu_U_8, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
-	cudaMalloc(&gpu_V_8, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
-
 	cudaMalloc(&gpu_Y_pred, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
 	cudaMalloc(&gpu_U_pred, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
 	cudaMalloc(&gpu_V_pred, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
@@ -298,10 +289,6 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(gpu_Y_16);
 	cudaFree(gpu_U_16);
 	cudaFree(gpu_V_16);
-
-	cudaFree(gpu_Y_8);
-	cudaFree(gpu_U_8);
-	cudaFree(gpu_V_8);
 
 	cudaFree(gpu_Y_pred);
 	cudaFree(gpu_U_pred);
