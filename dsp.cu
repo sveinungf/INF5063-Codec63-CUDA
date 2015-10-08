@@ -108,11 +108,6 @@ __constant__ uint8_t UV_indexes[64] =
 
 __device__ void dct_quant_block_8x8(float* in_data, float *out_data, int quant_index, int i, int j)
 {
-	// Copy pixel to shared memory
-	//dct_macro_block2[i*8+j] = in_data[i*8+j];
-	//__syncthreads();
-
-
 	// First dct_1d - mb = mb2 - and transpose
 	float dct = 0;
 	int k;

@@ -1,6 +1,6 @@
-CC = nvcc -lineinfo -rdc=true
+CC = nvcc -rdc=true
 #NVCC = nvcc -lineinfo
-CFLAGS = -O3 -pg #-Wall -pg -DSHOW_CYCLES
+CFLAGS = -O3 #-Wall -pg -DSHOW_CYCLES
 LDFLAGS = -lm
 
 all: c63enc #c63dec c63pred

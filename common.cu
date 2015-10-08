@@ -316,7 +316,7 @@ __host__ void dequantize_idct2(int16_t *in_data, uint8_t *prediction, uint32_t w
 }
 
 __global__ void dct_quantize_row2(uint8_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data,
-		int quantization, int blocksPerRow, int pixelsPerRow)
+		int quantization)
 {
 	/* Perform the DCT and quantization */
 //	int x;
@@ -324,8 +324,9 @@ __global__ void dct_quantize_row2(uint8_t *in_data, uint8_t *prediction, int w, 
 	//{
 	float block[8 * 8];
 
-	int block_offset = blockIdx.x * 64;
-	int x_offset = (blockIdx.x / blocksPerRow) * pixelsPerRow + (blockIdx.x % blocksPerRow) * 8;
+	int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
+
+	int offset = blockIdx.x * 8 + blockIdx.y * w*8;
 
 	int i, j;
 
@@ -333,7 +334,7 @@ __global__ void dct_quantize_row2(uint8_t *in_data, uint8_t *prediction, int w, 
 	{
 		for (j = 0; j < 8; ++j)
 		{
-			block[i * 8 + j] = ((float) in_data[i * w + j + x_offset] - prediction[i * w + j + x_offset]);
+			block[i * 8 + j] = ((float) in_data[offset + i * w + j] - prediction[offset + i * w + j]);
 		}
 	}
 
@@ -345,20 +346,17 @@ __global__ void dct_quantize_row2(uint8_t *in_data, uint8_t *prediction, int w, 
 }
 
 __host__ void dct_quantize2(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		int16_t *out_data, int quantization)
+		int16_t *gpu_out_data, int16_t *out_data, int quantization)
 {
-	int numBlocks = (width*height)/64;
-	int threadsPerBlock = 1;
-
-	int blocksPerRow = width/8;
-	int pixelsPerRow = width*8;
+	dim3 threadsPerBlock(8,8);
+	dim3 numBlocks(width/threadsPerBlock.x, height/threadsPerBlock.y);
 
 	//for (y = 0; y < height; y += 8)
 	//{
 	dct_quantize_row2<<<numBlocks, threadsPerBlock>>>(in_data, prediction, width, height,
-				gpu_temp_16[quantization], quantization, blocksPerRow, pixelsPerRow);
+				gpu_out_data, quantization);
 	//}
-	cudaMemcpy(out_data, gpu_temp_16[quantization], width*height*sizeof(int16_t), cudaMemcpyDeviceToHost);
+	cudaMemcpy(out_data, gpu_out_data, width*height*sizeof(int16_t), cudaMemcpyDeviceToHost);
 }
 
 void destroy_frame(struct frame *f)
