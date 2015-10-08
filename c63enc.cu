@@ -32,16 +32,16 @@ extern char *optarg;
 
 // Temporary buffers
 int16_t *gpu_Y_16;
-uint8_t *gpu_Y_8;
 uint8_t *gpu_Y_pred;
 
 int16_t *gpu_U_16;
-uint8_t *gpu_U_8;
 uint8_t *gpu_U_pred;
 
 int16_t *gpu_V_16;
-uint8_t *gpu_V_8;
 uint8_t *gpu_V_pred;
+
+cudaStream_t stream1, stream2, stream3, stream4, stream5, stream6;
+
 
 // Get CPU cycle count
 uint64_t rdtsc(){
@@ -90,12 +90,12 @@ static bool read_yuv(FILE *file, struct c63_common *cm, yuv_t* image)
 static void zero_out_prediction(struct c63_common* cm)
 {
 	struct frame* frame = cm->curframe;
-	memset(frame->predicted->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
-	memset(frame->predicted->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
-	memset(frame->predicted->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
+	cudaMemset(frame->predicted_gpu->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
+	cudaMemset(frame->predicted_gpu->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
+	cudaMemset(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
 }
 
-static void c63_encode_image(struct c63_common *cm, yuv_t *image)
+static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_gpu)
 {
 	// Advance to next frame by swapping current and reference frame
 	struct frame* temp = cm->refframe;
@@ -103,6 +103,7 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 	cm->curframe = temp;
 
 	cm->curframe->orig = image;
+	cm->curframe->orig_gpu = image_gpu;
 
 	/* Check if keyframe */
 	if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -127,35 +128,50 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 		// dct_quantize() expects zeroed out prediction buffers for key frames.
 		// We zero them out here since we reuse the buffers from previous frames.
 		zero_out_prediction(cm);
-
-		cudaMemcpy(cm->cuda_me.predY_gpu, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
-		cudaMemcpy(cm->cuda_me.predU_gpu, cm->curframe->predicted->U, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
-		cudaMemcpy(cm->cuda_me.predV_gpu, cm->curframe->predicted->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
 	}
 
+	yuv_t* predicted = cm->curframe->predicted_gpu;
+	dct_t* residuals = cm->curframe->residuals_gpu;
+
+	const dim3 threadsPerBlock(8, 8);
+
+	const dim3 numBlocks_Y(cm->padw[Y_COMPONENT]/threadsPerBlock.x, cm->padh[Y_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_U(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_V(cm->padw[V_COMPONENT]/threadsPerBlock.x, cm->padh[V_COMPONENT]/threadsPerBlock.y);
+
 	/* DCT and Quantization */
-	dct_quantize(cm->curframe->orig->Y_gpu, cm->cuda_me.predY_gpu, cm->padw[Y_COMPONENT],
-			cm->padh[Y_COMPONENT], gpu_Y_16, cm->curframe->residuals->Ydct,
-			Y_COMPONENT);
+	dct_quantize<<<numBlocks_Y, threadsPerBlock, 0, stream1>>>(cm->curframe->orig_gpu->Y, predicted->Y,
+			cm->padw[Y_COMPONENT], residuals->Ydct, Y_COMPONENT);
+	cudaMemcpyAsync(cm->curframe->residuals->Ydct, residuals->Ydct, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t),
+			cudaMemcpyDeviceToHost, stream1);
 
-	dct_quantize(cm->curframe->orig->U_gpu, cm->cuda_me.predU_gpu, cm->padw[U_COMPONENT],
-			cm->padh[U_COMPONENT], gpu_U_16, cm->curframe->residuals->Udct,
-			U_COMPONENT);
+	dct_quantize<<<numBlocks_U, threadsPerBlock, 0, stream2>>>(cm->curframe->orig_gpu->U, predicted->U,
+			cm->padw[U_COMPONENT], residuals->Udct, U_COMPONENT);
+	cudaMemcpyAsync(cm->curframe->residuals->Udct, residuals->Udct, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t),
+			cudaMemcpyDeviceToHost, stream2);
 
-	dct_quantize(cm->curframe->orig->V_gpu, cm->cuda_me.predV_gpu, cm->padw[V_COMPONENT],
-			cm->padh[V_COMPONENT], gpu_V_16, cm->curframe->residuals->Vdct,
-			V_COMPONENT);
+	dct_quantize<<<numBlocks_V, threadsPerBlock, 0, stream3>>>(cm->curframe->orig_gpu->V, predicted->V,
+			cm->padw[V_COMPONENT], residuals->Vdct, V_COMPONENT);
+	cudaMemcpyAsync(cm->curframe->residuals->Vdct, residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t),
+			cudaMemcpyDeviceToHost, stream3);
+
 
 	/* Reconstruct frame for inter-prediction */
-	dequantize_idct(gpu_Y_16, cm->cuda_me.predY_gpu,
-			cm->ypw, cm->yph, gpu_Y_8, cm->curframe->recons->Y, Y_COMPONENT);
-	dequantize_idct(gpu_U_16, cm->cuda_me.predU_gpu,
-			cm->upw, cm->uph, gpu_U_8, cm->curframe->recons->U, U_COMPONENT);
-	dequantize_idct(gpu_V_16, cm->cuda_me.predV_gpu,
-			cm->vpw, cm->vph, gpu_V_8, cm->curframe->recons->V, V_COMPONENT);
+	dequantize_idct<<<numBlocks_Y, threadsPerBlock>>>(residuals->Ydct, predicted->Y,
+			cm->ypw, cm->curframe->recons_gpu->Y, Y_COMPONENT);
+
+	dequantize_idct<<<numBlocks_U, threadsPerBlock>>>(residuals->Udct, predicted->U,
+			cm->upw, cm->curframe->recons_gpu->U, U_COMPONENT);
+
+	dequantize_idct<<<numBlocks_V, threadsPerBlock>>>(residuals->Vdct, predicted->V,
+			cm->vpw, cm->curframe->recons_gpu->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
+
+	cudaStreamSynchronize(stream1);
+	cudaStreamSynchronize(stream2);
+	cudaStreamSynchronize(stream3);
 
 	write_frame(cm);
 
@@ -255,36 +271,6 @@ static void init_cuda_data(c63_common* cm)
 {
 	cuda_data_me* cuda_me = &(cm->cuda_me);
 
-	const int frame_size_Y = cm->padw[Y_COMPONENT] * cm->padh[Y_COMPONENT] * sizeof(uint8_t);
-	const int frame_size_U = cm->padw[U_COMPONENT] * cm->padh[U_COMPONENT] * sizeof(uint8_t);
-	const int frame_size_V = cm->padw[V_COMPONENT] * cm->padh[V_COMPONENT] * sizeof(uint8_t);
-
-	cudaMalloc((void**) &(cuda_me->origY_gpu), frame_size_Y);
-	cudaMalloc((void**) &(cuda_me->origU_gpu), frame_size_U);
-	cudaMalloc((void**) &(cuda_me->origV_gpu), frame_size_V);
-
-	cudaMalloc((void**) &(cuda_me->refY_gpu), frame_size_Y);
-	cudaMalloc((void**) &(cuda_me->refU_gpu), frame_size_U);
-	cudaMalloc((void**) &(cuda_me->refV_gpu), frame_size_V);
-
-	cudaMalloc((void**) &(cuda_me->predY_gpu), frame_size_Y);
-	cudaMalloc((void**) &(cuda_me->predU_gpu), frame_size_U);
-	cudaMalloc((void**) &(cuda_me->predV_gpu), frame_size_V);
-
-	cuda_me->vector_x = new int[cm->mb_rowsY * cm->mb_colsY];
-	cuda_me->vector_y = new int[cm->mb_rowsY * cm->mb_colsY];
-	cuda_me->use_mv = new int[cm->mb_rowsY * cm->mb_colsY];
-
-	cudaMalloc((void**) &(cuda_me->vector_xY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_xU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_xV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_yY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_yU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->vector_yV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvY_gpu), cm->mb_rowsY*cm->mb_colsY*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvU_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-	cudaMalloc((void**) &(cuda_me->use_mvV_gpu), cm->mb_rowsUV*cm->mb_colsUV*sizeof(int));
-
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_colsY * sizeof(int));
@@ -298,45 +284,23 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc(&gpu_U_16, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t));
 	cudaMalloc(&gpu_V_16, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t));
 
-	cudaMalloc(&gpu_Y_8, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
-	cudaMalloc(&gpu_U_8, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
-	cudaMalloc(&gpu_V_8, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
-
 	cudaMalloc(&gpu_Y_pred, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
 	cudaMalloc(&gpu_U_pred, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
 	cudaMalloc(&gpu_V_pred, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
+
+	cudaStreamCreate(&stream1);
+	cudaStreamCreate(&stream2);
+	cudaStreamCreate(&stream3);
+
+	cudaStreamCreate(&stream4);
+	cudaStreamCreate(&stream5);
+	cudaStreamCreate(&stream6);
 
 	set_searchrange_boundaries_cuda(cm);
 }
 
 static void cleanup_cuda_data(c63_common* cm)
 {
-	cudaFree(cm->cuda_me.origY_gpu);
-	cudaFree(cm->cuda_me.origU_gpu);
-	cudaFree(cm->cuda_me.origV_gpu);
-
-	cudaFree(cm->cuda_me.refY_gpu);
-	cudaFree(cm->cuda_me.refU_gpu);
-	cudaFree(cm->cuda_me.refV_gpu);
-
-	cudaFree(cm->cuda_me.predY_gpu);
-	cudaFree(cm->cuda_me.predU_gpu);
-	cudaFree(cm->cuda_me.predV_gpu);
-
-	delete[] cm->cuda_me.vector_x;
-	delete[] cm->cuda_me.vector_y;
-	delete[] cm->cuda_me.use_mv;
-
-	cudaFree(cm->cuda_me.vector_xY_gpu);
-	cudaFree(cm->cuda_me.vector_xU_gpu);
-	cudaFree(cm->cuda_me.vector_xV_gpu);
-	cudaFree(cm->cuda_me.vector_yY_gpu);
-	cudaFree(cm->cuda_me.vector_yU_gpu);
-	cudaFree(cm->cuda_me.vector_yV_gpu);
-	cudaFree(cm->cuda_me.use_mvY_gpu);
-	cudaFree(cm->cuda_me.use_mvU_gpu);
-	cudaFree(cm->cuda_me.use_mvV_gpu);
-
 	cudaFree(cm->cuda_me.leftsY_gpu);
 	cudaFree(cm->cuda_me.leftsUV_gpu);
 	cudaFree(cm->cuda_me.rightsY_gpu);
@@ -350,20 +314,24 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(gpu_U_16);
 	cudaFree(gpu_V_16);
 
-	cudaFree(gpu_Y_8);
-	cudaFree(gpu_U_8);
-	cudaFree(gpu_V_8);
-
 	cudaFree(gpu_Y_pred);
 	cudaFree(gpu_U_pred);
 	cudaFree(gpu_V_pred);
+
+	cudaStreamDestroy(stream1);
+	cudaStreamDestroy(stream2);
+	cudaStreamDestroy(stream3);
+	cudaStreamDestroy(stream4);
+	cudaStreamDestroy(stream5);
+	cudaStreamDestroy(stream6);
+
 }
 
-static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image)
+static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
 {
-	cudaMemcpy(image->Y_gpu, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image->U_gpu, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image->V_gpu, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->Y, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->U, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->V, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
 }
 
 struct c63_common* init_c63_enc(int width, int height)
@@ -371,7 +339,8 @@ struct c63_common* init_c63_enc(int width, int height)
   int i;
 
   /* calloc() sets allocated memory to zero */
-  struct c63_common *cm = (c63_common*) calloc(1, sizeof(struct c63_common));
+  struct c63_common *cm;// = (c63_common*) calloc(1, sizeof(struct c63_common));
+  cudaMallocHost((void**)&cm, sizeof(struct c63_common));
 
   cm->width = width;
   cm->height = height;
@@ -415,7 +384,7 @@ void free_c63_enc(struct c63_common* cm)
 {
 	destroy_frame(cm->curframe);
 	destroy_frame(cm->refframe);
-	free(cm);
+	cudaFree(cm);
 }
 
 static void print_help()
@@ -496,35 +465,36 @@ int main(int argc, char **argv)
 	# endif
 
 	yuv_t *image = create_image(cm);
+	yuv_t *image_gpu = create_image_gpu(cm);
 
 	while (1)
-	{
-		bool ok = read_yuv(infile, cm, image);
+		{
+			bool ok = read_yuv(infile, cm, image);
 
-		if (!ok) { break; }
+			if (!ok) { break; }
 
-		copy_image_to_gpu(cm, image);
+			copy_image_to_gpu(cm, image, image_gpu);
 
-		printf("Encoding frame %d, ", numframes);
+			printf("Encoding frame %d, ", numframes);
 
-	# ifdef SHOW_CYCLES
-		uint64_t cycleCountBefore = rdtsc();
-		c63_encode_image(cm, image);
-		uint64_t cycleCountAfter = rdtsc();
+		# ifdef SHOW_CYCLES
+			uint64_t cycleCountBefore = rdtsc();
+			c63_encode_image(cm, image, image_gpu);
+			uint64_t cycleCountAfter = rdtsc();
 
-		uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
-		kCycleCountTotal += kCycleCount;
-		printf("%" PRIu64 "k cycles, ", kCycleCount);
-	# else
-		c63_encode_image(cm, image);
-	# endif
+			uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
+			kCycleCountTotal += kCycleCount;
+			printf("%" PRIu64 "k cycles, ", kCycleCount);
+		# else
+			c63_encode_image(cm, image, image_gpu);
+		# endif
 
-		printf("Done!\n");
+			printf("Done!\n");
 
-		++numframes;
+			++numframes;
 
-		if (limit_numframes && numframes >= limit_numframes) { break; }
-	}
+			if (limit_numframes && numframes >= limit_numframes) { break; }
+		}
 
 # ifdef SHOW_CYCLES
 	printf("-----------\n");
@@ -532,9 +502,12 @@ int main(int argc, char **argv)
 # endif
 
 	destroy_image(image);
+	destroy_image_gpu(image_gpu);
 	cleanup_cuda_data(cm);
 
 	free_c63_enc(cm);
+	fclose(outfile);
+	fclose(infile);
 
 	return EXIT_SUCCESS;
 }
