@@ -148,23 +148,7 @@ __host__ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t wi
 	dim3 numBlocks(width/threadsPerBlock.x, height/threadsPerBlock.y);
 
 	dequantize_idct_row<<<numBlocks, threadsPerBlock>>>(in_data, prediction, width, gpu_out_data, quantization);
-	//dequantize_add_pred<<<numBlocks, threadsPerBlock>>>(gpu_temp_16[quantization], prediction, width, gpu_out_data);
 	cudaMemcpy(out_data, gpu_out_data, width*height*sizeof(uint8_t), cudaMemcpyDeviceToHost);
-	/*int16_t temp[width*height];
-	cudaMemcpy(temp, gpu_temp_16[quantization], width*height*sizeof(int16_t), cudaMemcpyDeviceToHost);
-	int i;
-	for(i = 0; i < width*height; ++i) {
-		if (temp[i] < 0)
-		{
-			temp[i] = 0;
-		}
-		else if (temp[i] > 255)
-		{
-			temp[i] = 255;
-		}
-		out_data[i] = temp[i];
-	}
-	*/
 }
 
 __global__ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_data,
@@ -177,16 +161,11 @@ __global__ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, i
 
 	int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i*w+j;
 
-	//int x_offset = blockIdx.x * 8;
-	//int y_offset = blockIdx.y * w*8;
-
 	dct_in[i*8+j] = ((float) in_data[offset] - prediction[offset]);
 	__syncthreads();
 	dct_quant_block_8x8(dct_in, dct_out, quantization, i, j);
 
 	out_data[block_offset + i*8+j] = dct_in[i*8+j];
-
-
 }
 /*
 __global__ void dct_quantize_row3(uint8_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data,
@@ -359,28 +338,66 @@ __host__ void dct_quantize2(uint8_t *in_data, uint8_t *prediction, uint32_t widt
 	cudaMemcpy(out_data, gpu_out_data, width*height*sizeof(int16_t), cudaMemcpyDeviceToHost);
 }
 
+static void create_frame_gpu(struct c63_common* cm, struct frame* f)
+{
+	cudaMalloc((void**) &f->residuals->Ydct_gpu, cm->ypw * cm->yph * sizeof(int16_t));
+	cudaMalloc((void**) &f->residuals->Udct_gpu, cm->upw * cm->uph * sizeof(int16_t));
+	cudaMalloc((void**) &f->residuals->Vdct_gpu, cm->vpw * cm->vph * sizeof(int16_t));
+
+	cudaMalloc((void**) &f->mbs_gpu[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY *
+			sizeof(struct macroblock));
+	cudaMalloc((void**) &f->mbs_gpu[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV *
+			sizeof(struct macroblock));
+	cudaMalloc((void**) &f->mbs_gpu[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV *
+			sizeof(struct macroblock));
+}
+
+static void destroy_frame_gpu(struct frame* f)
+{
+	cudaFree(f->residuals->Ydct_gpu);
+	cudaFree(f->residuals->Udct_gpu);
+	cudaFree(f->residuals->Vdct_gpu);
+
+	cudaFree(f->mbs_gpu[Y_COMPONENT]);
+	cudaFree(f->mbs_gpu[U_COMPONENT]);
+	cudaFree(f->mbs_gpu[V_COMPONENT]);
+}
+
+struct frame* create_frame(struct c63_common *cm)
+{
+	struct frame *f = (frame*) malloc(sizeof(struct frame));
+
+	f->recons = create_image(cm);
+	f->predicted = create_image(cm);
+
+	f->residuals = (dct_t*) malloc(sizeof(dct_t));
+	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
+	f->residuals->Udct = (int16_t*) malloc(cm->upw * cm->uph * sizeof(int16_t));
+	f->residuals->Vdct = (int16_t*) malloc(cm->vpw * cm->vph * sizeof(int16_t));
+
+	f->mbs[Y_COMPONENT] = (macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY,
+			sizeof(struct macroblock));
+	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV,
+			sizeof(struct macroblock));
+	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV,
+			sizeof(struct macroblock));
+
+	create_frame_gpu(cm, f);
+
+	return f;
+}
+
 void destroy_frame(struct frame *f)
 {
-	/* First frame doesn't have a reconstructed frame to destroy */
-	if (!f)
-	{
-		return;
-	}
+	destroy_frame_gpu(f);
 
-	free(f->recons->Y);
-	free(f->recons->U);
-	free(f->recons->V);
-	free(f->recons);
+	destroy_image(f->recons);
+	destroy_image(f->predicted);
 
 	free(f->residuals->Ydct);
 	free(f->residuals->Udct);
 	free(f->residuals->Vdct);
 	free(f->residuals);
-
-	free(f->predicted->Y);
-	free(f->predicted->U);
-	free(f->predicted->V);
-	free(f->predicted);
 
 	free(f->mbs[Y_COMPONENT]);
 	free(f->mbs[U_COMPONENT]);
@@ -389,35 +406,40 @@ void destroy_frame(struct frame *f)
 	free(f);
 }
 
-struct frame* create_frame(struct c63_common *cm, yuv_t *image)
+static void create_image_gpu(struct c63_common* cm, yuv_t* image)
 {
-	struct frame *f = (frame*) malloc(sizeof(struct frame));
+	cudaMalloc((void**) &image->Y_gpu, cm->ypw * cm->yph * sizeof(uint8_t));
+	cudaMalloc((void**) &image->U_gpu, cm->upw * cm->uph * sizeof(uint8_t));
+	cudaMalloc((void**) &image->V_gpu, cm->vpw * cm->vph * sizeof(uint8_t));
+}
 
-	f->orig = image;
+static void destroy_image_gpu(yuv_t* image)
+{
+	cudaFree(image->Y_gpu);
+	cudaFree(image->U_gpu);
+	cudaFree(image->V_gpu);
+}
 
-	f->recons = (yuv_t*) malloc(sizeof(yuv_t));
-	f->recons->Y = (uint8_t*) malloc(cm->ypw * cm->yph);
-	f->recons->U = (uint8_t*) malloc(cm->upw * cm->uph);
-	f->recons->V = (uint8_t*) malloc(cm->vpw * cm->vph);
+yuv_t* create_image(struct c63_common *cm)
+{
+	yuv_t* image = (yuv_t*) malloc(sizeof(yuv_t));
+	image->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
+	image->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
+	image->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
 
-	f->predicted = (yuv_t*) malloc(sizeof(yuv_t));
-	f->predicted->Y = (uint8_t*) calloc(cm->ypw * cm->yph, sizeof(uint8_t));
-	f->predicted->U = (uint8_t*) calloc(cm->upw * cm->uph, sizeof(uint8_t));
-	f->predicted->V = (uint8_t*) calloc(cm->vpw * cm->vph, sizeof(uint8_t));
+	create_image_gpu(cm, image);
 
-	f->residuals = (dct_t*) malloc(sizeof(dct_t));
-	f->residuals->Ydct = (int16_t*) calloc(cm->ypw * cm->yph, sizeof(int16_t));
-	f->residuals->Udct = (int16_t*) calloc(cm->upw * cm->uph, sizeof(int16_t));
-	f->residuals->Vdct = (int16_t*) calloc(cm->vpw * cm->vph, sizeof(int16_t));
+	return image;
+}
 
-	f->mbs[Y_COMPONENT] = (macroblock*) calloc(cm->mb_rows * cm->mb_cols,
-			sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (macroblock*) calloc(cm->mb_rows / 2 * cm->mb_cols / 2,
-			sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (macroblock*) calloc(cm->mb_rows / 2 * cm->mb_cols / 2,
-			sizeof(struct macroblock));
+void destroy_image(yuv_t *image)
+{
+	destroy_image_gpu(image);
 
-	return f;
+	free(image->Y);
+	free(image->U);
+	free(image->V);
+	free(image);
 }
 
 void dump_image(yuv_t *image, int w, int h, FILE *fp)
