@@ -80,11 +80,10 @@ struct macroblock
 
 struct frame
 {
-  yuv_t *orig;        // Original input image
+  yuv_t *orig;				// Original input image
   yuv_t *orig_gpu;
-  yuv_t *recons_gpu;  // Reconstructed image
-  yuv_t *predicted;   // Predicted frame from intra-prediction
-  yuv_t *predicted_gpu;
+  yuv_t *recons_gpu;		// Reconstructed image
+  yuv_t *predicted_gpu;		// Predicted frame from intra-prediction
 
   dct_t *residuals;   // Difference between original image and predicted frame
   dct_t *residuals_gpu;

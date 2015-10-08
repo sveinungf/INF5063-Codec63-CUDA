@@ -78,10 +78,6 @@ static bool read_yuv(FILE *file, struct c63_common *cm, yuv_t* image)
 static void zero_out_prediction(struct c63_common* cm)
 {
 	struct frame* frame = cm->curframe;
-	memset(frame->predicted->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
-	memset(frame->predicted->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
-	memset(frame->predicted->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
-
 	cudaMemset(frame->predicted_gpu->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
 	cudaMemset(frame->predicted_gpu->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
 	cudaMemset(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));

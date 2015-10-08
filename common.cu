@@ -125,8 +125,6 @@ struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
 
-	f->predicted = create_image(cm);
-
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
 	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
 	f->residuals->Udct = (int16_t*) malloc(cm->upw * cm->uph * sizeof(int16_t));
@@ -144,8 +142,6 @@ struct frame* create_frame(struct c63_common *cm)
 void destroy_frame(struct frame *f)
 {
 	deinit_frame_gpu(f);
-
-	destroy_image(f->predicted);
 
 	free(f->residuals->Ydct);
 	free(f->residuals->Udct);
