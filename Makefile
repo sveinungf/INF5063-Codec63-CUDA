@@ -70,7 +70,7 @@ gprof:
 gprof-file:
 	gprof c63enc gmon.out > temp/gprof-result.txt
 nvprof:
-	nvprof ./c63enc -w $(WIDTH) -h $(HEIGHT) -o temp/test.c63 $(INPUT_VIDEO)
+	nvprof --cpu-profiling on ./c63enc -w $(WIDTH) -h $(HEIGHT) -f $(FRAMES) -o temp/test.c63 $(INPUT_VIDEO)
 
 psnr:
 	./tools/yuv-tools/ycbcr.py psnr $(INPUT_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(OUTPUT_VIDEO)
