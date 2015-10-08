@@ -102,20 +102,13 @@ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_
 
 void destroy_frame(struct frame *f)
 {
-	free(f->recons->Y);
-	free(f->recons->U);
-	free(f->recons->V);
-	free(f->recons);
+	destroy_image(f->recons);
+	destroy_image(f->predicted);
 
 	free(f->residuals->Ydct);
 	free(f->residuals->Udct);
 	free(f->residuals->Vdct);
 	free(f->residuals);
-
-	free(f->predicted->Y);
-	free(f->predicted->U);
-	free(f->predicted->V);
-	free(f->predicted);
 
 	free(f->mbs[Y_COMPONENT]);
 	free(f->mbs[U_COMPONENT]);
@@ -128,15 +121,8 @@ struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
 
-	f->recons = (yuv_t*) malloc(sizeof(yuv_t));
-	f->recons->Y = (uint8_t*) malloc(cm->ypw * cm->yph);
-	f->recons->U = (uint8_t*) malloc(cm->upw * cm->uph);
-	f->recons->V = (uint8_t*) malloc(cm->vpw * cm->vph);
-
-	f->predicted = (yuv_t*) malloc(sizeof(yuv_t));
-	f->predicted->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
-	f->predicted->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
-	f->predicted->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
+	f->recons = create_image(cm);
+	f->predicted = create_image(cm);
 
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
 	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
