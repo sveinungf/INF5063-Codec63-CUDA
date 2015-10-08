@@ -15,8 +15,8 @@ extern "C" {
 }
 
 #include "common.h"
+#include "dsp.h"
 #include "me.h"
-
 
 static char *output_file, *input_file;
 FILE *outfile;
@@ -29,6 +29,19 @@ static uint32_t height;
 /* getopt */
 extern int optind;
 extern char *optarg;
+
+// Temporary buffers
+int16_t *gpu_Y_16;
+uint8_t *gpu_Y_8;
+uint8_t *gpu_Y_pred;
+
+int16_t *gpu_U_16;
+uint8_t *gpu_U_8;
+uint8_t *gpu_U_pred;
+
+int16_t *gpu_V_16;
+uint8_t *gpu_V_8;
+uint8_t *gpu_V_pred;
 
 // Get CPU cycle count
 uint64_t rdtsc(){
@@ -88,67 +101,71 @@ static void zero_out_prediction(struct c63_common* cm)
 
 static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_gpu)
 {
-  // Advance to next frame by swapping current and reference frame
-  struct frame* temp = cm->refframe;
-  cm->refframe = cm->curframe;
-  cm->curframe = temp;
+	// Advance to next frame by swapping current and reference frame
+	struct frame* temp = cm->refframe;
+	cm->refframe = cm->curframe;
+	cm->curframe = temp;
 
-  cm->curframe->orig = image;
-  cm->curframe->orig_gpu = image_gpu;
+	cm->curframe->orig = image;
+	cm->curframe->orig_gpu = image_gpu;
 
-  /* Check if keyframe */
-  if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
-  {
-    cm->curframe->keyframe = 1;
-    cm->frames_since_keyframe = 0;
+	/* Check if keyframe */
+	if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
+	{
+		cm->curframe->keyframe = 1;
+		cm->frames_since_keyframe = 0;
 
-    fprintf(stderr, " (keyframe) ");
-  }
-  else { cm->curframe->keyframe = 0; }
+		fprintf(stderr, " (keyframe) ");
+	}
+	else { cm->curframe->keyframe = 0; }
 
-  if (!cm->curframe->keyframe)
-  {
-    /* Motion Estimation */
-    c63_motion_estimate(cm);
+	if (!cm->curframe->keyframe)
+	{
+		/* Motion Estimation */
+		c63_motion_estimate(cm);
 
-    /* Motion Compensation */
-    c63_motion_compensate(cm);
-  }
-  else
-  {
-	// dct_quantize() expects zeroed out prediction buffers for key frames.
-	// We zero them out here since we reuse the buffers from previous frames.
-    zero_out_prediction(cm);
-  }
+		/* Motion Compensation */
+		c63_motion_compensate(cm);
+	}
+	else
+	{
+		// dct_quantize() expects zeroed out prediction buffers for key frames.
+		// We zero them out here since we reuse the buffers from previous frames.
+		zero_out_prediction(cm);
 
-  /* DCT and Quantization */
-  dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
-      cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
-      cm->quanttbl[Y_COMPONENT]);
+		//cudaMemcpy(cm->cuda_me.predY_gpu, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+		//cudaMemcpy(cm->cuda_me.predU_gpu, cm->curframe->predicted->U, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+		//cudaMemcpy(cm->cuda_me.predV_gpu, cm->curframe->predicted->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t), cudaMemcpyHostToDevice);
+	}
 
-  dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
-      cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
-      cm->quanttbl[U_COMPONENT]);
+	/* DCT and Quantization */
+	dct_quantize(cm->curframe->orig_gpu->Y, cm->curframe->predicted_gpu->Y, cm->padw[Y_COMPONENT],
+			cm->padh[Y_COMPONENT], gpu_Y_16, cm->curframe->residuals->Ydct,
+			Y_COMPONENT);
 
-  dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
-      cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
-      cm->quanttbl[V_COMPONENT]);
+	dct_quantize(cm->curframe->orig_gpu->U, cm->curframe->predicted_gpu->U, cm->padw[U_COMPONENT],
+			cm->padh[U_COMPONENT], gpu_U_16, cm->curframe->residuals->Udct,
+			U_COMPONENT);
 
-  /* Reconstruct frame for inter-prediction */
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
-      cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
-      cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
-      cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
+	dct_quantize(cm->curframe->orig_gpu->V, cm->curframe->predicted_gpu->V, cm->padw[V_COMPONENT],
+			cm->padh[V_COMPONENT], gpu_V_16, cm->curframe->residuals->Vdct,
+			V_COMPONENT);
 
-  /* Function dump_image(), found in common.c, can be used here to check if the
+	/* Reconstruct frame for inter-prediction */
+	dequantize_idct(gpu_Y_16, cm->curframe->predicted_gpu->Y,
+			cm->ypw, cm->yph, gpu_Y_8, cm->curframe->recons->Y, Y_COMPONENT);
+	dequantize_idct(gpu_U_16, cm->curframe->predicted_gpu->U,
+			cm->upw, cm->uph, gpu_U_8, cm->curframe->recons->U, U_COMPONENT);
+	dequantize_idct(gpu_V_16, cm->curframe->predicted_gpu->V,
+			cm->vpw, cm->vph, gpu_V_8, cm->curframe->recons->V, V_COMPONENT);
+
+	/* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
 
-  write_frame(cm);
+	write_frame(cm);
 
-  ++cm->framenum;
-  ++cm->frames_since_keyframe;
+	++cm->framenum;
+	++cm->frames_since_keyframe;
 }
 
 static void set_searchrange_boundaries_cuda(c63_common* cm)
@@ -252,6 +269,18 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rowsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rowsUV * sizeof(int));
 
+	cudaMalloc(&gpu_Y_16, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t));
+	cudaMalloc(&gpu_U_16, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t));
+	cudaMalloc(&gpu_V_16, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t));
+
+	cudaMalloc(&gpu_Y_8, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_U_8, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_V_8, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
+
+	cudaMalloc(&gpu_Y_pred, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_U_pred, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(uint8_t));
+	cudaMalloc(&gpu_V_pred, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(uint8_t));
+
 	set_searchrange_boundaries_cuda(cm);
 }
 
@@ -265,6 +294,18 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.topsUV_gpu);
 	cudaFree(cm->cuda_me.bottomsY_gpu);
 	cudaFree(cm->cuda_me.bottomsUV_gpu);
+
+	cudaFree(gpu_Y_16);
+	cudaFree(gpu_U_16);
+	cudaFree(gpu_V_16);
+
+	cudaFree(gpu_Y_8);
+	cudaFree(gpu_U_8);
+	cudaFree(gpu_V_8);
+
+	cudaFree(gpu_Y_pred);
+	cudaFree(gpu_U_pred);
+	cudaFree(gpu_V_pred);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
@@ -321,9 +362,9 @@ struct c63_common* init_c63_enc(int width, int height)
 
 void free_c63_enc(struct c63_common* cm)
 {
-  destroy_frame(cm->curframe);
-  destroy_frame(cm->refframe);
-  free(cm);
+	destroy_frame(cm->curframe);
+	destroy_frame(cm->refframe);
+	free(cm);
 }
 
 static void print_help()
@@ -341,112 +382,112 @@ static void print_help()
 
 int main(int argc, char **argv)
 {
-  int c;
+	int c;
 
-  if (argc == 1) { print_help(); }
+	if (argc == 1) { print_help(); }
 
-  while ((c = getopt(argc, argv, "h:w:o:f:i:")) != -1)
-  {
-    switch (c)
-    {
-      case 'h':
-        height = atoi(optarg);
-        break;
-      case 'w':
-        width = atoi(optarg);
-        break;
-      case 'o':
-        output_file = optarg;
-        break;
-      case 'f':
-        limit_numframes = atoi(optarg);
-        break;
-      default:
-        print_help();
-        break;
-    }
-  }
+	while ((c = getopt(argc, argv, "h:w:o:f:i:")) != -1)
+	{
+		switch (c)
+		{
+		case 'h':
+			height = atoi(optarg);
+			break;
+		case 'w':
+			width = atoi(optarg);
+			break;
+		case 'o':
+			output_file = optarg;
+			break;
+		case 'f':
+			limit_numframes = atoi(optarg);
+			break;
+		default:
+			print_help();
+			break;
+		}
+	}
 
-  if (optind >= argc)
-  {
-    fprintf(stderr, "Error getting program options, try --help.\n");
-    exit(EXIT_FAILURE);
-  }
+	if (optind >= argc)
+	{
+		fprintf(stderr, "Error getting program options, try --help.\n");
+		exit(EXIT_FAILURE);
+	}
 
-  outfile = fopen(output_file, "wb");
+	outfile = fopen(output_file, "wb");
 
-  if (outfile == NULL)
-  {
-    perror("fopen");
-    exit(EXIT_FAILURE);
-  }
+	if (outfile == NULL)
+	{
+		perror("fopen");
+		exit(EXIT_FAILURE);
+	}
 
-  struct c63_common *cm = init_c63_enc(width, height);
-  cm->e_ctx.fp = outfile;
+	struct c63_common *cm = init_c63_enc(width, height);
+	cm->e_ctx.fp = outfile;
 
-  input_file = argv[optind];
+	input_file = argv[optind];
 
-  if (limit_numframes) { printf("Limited to %d frames.\n", limit_numframes); }
+	if (limit_numframes) { printf("Limited to %d frames.\n", limit_numframes); }
 
-  FILE *infile = fopen(input_file, "rb");
+	FILE *infile = fopen(input_file, "rb");
 
-  if (infile == NULL)
-  {
-    perror("fopen");
-    exit(EXIT_FAILURE);
-  }
+	if (infile == NULL)
+	{
+		perror("fopen");
+		exit(EXIT_FAILURE);
+	}
 
-  /* Encode input frames */
-  int numframes = 0;
+	/* Encode input frames */
+	int numframes = 0;
+
+	# ifdef SHOW_CYCLES
+	uint64_t kCycleCountTotal = 0;
+	# endif
+
+	yuv_t *image = create_image(cm);
+	yuv_t *image_gpu = create_image_gpu(cm);
+
+	while (1)
+	{
+		bool ok = read_yuv(infile, cm, image);
+
+		if (!ok) { break; }
+
+		copy_image_to_gpu(cm, image, image_gpu);
+
+		printf("Encoding frame %d, ", numframes);
+
+	# ifdef SHOW_CYCLES
+		uint64_t cycleCountBefore = rdtsc();
+		c63_encode_image(cm, image);
+		uint64_t cycleCountAfter = rdtsc();
+
+		uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
+		kCycleCountTotal += kCycleCount;
+		printf("%" PRIu64 "k cycles, ", kCycleCount);
+	# else
+		c63_encode_image(cm, image, image_gpu);
+	# endif
+
+		printf("Done!\n");
+
+		++numframes;
+
+		if (limit_numframes && numframes >= limit_numframes) { break; }
+	}
 
 # ifdef SHOW_CYCLES
-  uint64_t kCycleCountTotal = 0;
+	printf("-----------\n");
+	printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
 # endif
 
-  yuv_t *image = create_image(cm);
-  yuv_t *image_gpu = create_image_gpu(cm);
+	destroy_image(image);
+	destroy_image_gpu(image_gpu);
+	cleanup_cuda_data(cm);
 
-  while (1)
-  {
-    bool ok = read_yuv(infile, cm, image);
+	free_c63_enc(cm);
+	fclose(outfile);
+	fclose(infile);
 
-    if (!ok) { break; }
-
-    copy_image_to_gpu(cm, image, image_gpu);
-
-    printf("Encoding frame %d, ", numframes);
-
-# ifdef SHOW_CYCLES
-    uint64_t cycleCountBefore = rdtsc();
-    c63_encode_image(cm, image);
-    uint64_t cycleCountAfter = rdtsc();
-
-    uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
-    kCycleCountTotal += kCycleCount;
-    printf("%" PRIu64 "k cycles, ", kCycleCount);
-# else
-    c63_encode_image(cm, image, image_gpu);
-# endif
-
-    printf("Done!\n");
-
-    ++numframes;
-
-    if (limit_numframes && numframes >= limit_numframes) { break; }
-  }
-
-# ifdef SHOW_CYCLES
-  printf("-----------\n");
-  printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
-# endif
-
-  destroy_image(image);
-  destroy_image_gpu(image_gpu);
-  cleanup_cuda_data(cm);
-
-  free_c63_enc(cm);
-  fclose(outfile);
-  fclose(infile);
-
-  return EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 }

@@ -254,12 +254,8 @@ void c63_motion_compensate(struct c63_common *cm)
 	// TODO: Number of macroblock rows are now limited to 1024. Number of threads per block should
 	// ideally be a multiplum of the warp size (32).
 	mc_block_8x8_gpu<<<cm->mb_colsY, cm->mb_rowsY>>>(mbs[Y_COMPONENT], wY, pred->Y, ref->Y);
-	cudaMemcpy(cm->curframe->predicted->Y, pred->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
 	/* Chroma */
 	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(mbs[U_COMPONENT], wU, pred->U, ref->U);
-	cudaMemcpy(cm->curframe->predicted->U, pred->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-
 	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV>>>(mbs[V_COMPONENT], wV, pred->V, ref->V);
-	cudaMemcpy(cm->curframe->predicted->V, pred->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 }

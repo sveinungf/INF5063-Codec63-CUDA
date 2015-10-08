@@ -5,11 +5,11 @@
 
 #include <inttypes.h>
 
-void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-    uint8_t *quant_tbl);
+__device__
+void dct_quant_block_8x8(float *in_data, float *out_data, int quant_index, int i, int j);
 
-void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-    uint8_t *quant_tbl);
+__device__
+void dequant_idct_block_8x8(float *in_data, float *out_data, int quant_index, int i, int j);
 
 void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result);
 

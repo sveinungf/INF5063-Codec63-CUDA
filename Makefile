@@ -2,7 +2,7 @@ CC = gcc
 NVCC = nvcc
 
 CCFLAGS = -Wall
-NVCCFLAGS = -std=c++11
+NVCCFLAGS = -std=c++11 -rdc=true -fmad=false
 LDFLAGS = -lm
 
 DEBUG ?= 0

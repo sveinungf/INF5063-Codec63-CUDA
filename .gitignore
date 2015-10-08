@@ -1,6 +1,12 @@
 # object files
 c63enc
 *.o
+.cproject
+.project
+dsp_old.cu
+dsp_old1.cu
+dsp_old2.cu
+/master
 
 gmon.out
 *.pyc
