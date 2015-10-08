@@ -19,11 +19,22 @@ ALL_NVCCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
 
 ALL_LDFLAGS = $(addprefix -Xlinker ,$(LDFLAGS))
 
-WIDTH = 352
-HEIGHT = 288
-INPUT_VIDEO = yuv/foreman.yuv
-OUTPUT_VIDEO = yuv/test.yuv
-REFERENCE_VIDEO = yuv/reference.yuv
+VIDEO ?= 0
+FRAMES ?= 0
+
+ifeq ($(VIDEO),0)
+	WIDTH = 352
+	HEIGHT = 288
+	INPUT_VIDEO = yuv/foreman.yuv
+	OUTPUT_VIDEO = yuv/test.yuv
+	REFERENCE_VIDEO = yuv/reference.yuv
+else ifeq ($(VIDEO),1)
+	WIDTH = 3840
+	HEIGHT = 2160
+	INPUT_VIDEO = /opt/cipr/foreman_4k.yuv
+	OUTPUT_VIDEO = ~/yuv/test/foreman_4k.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/foreman_4k.yuv
+endif
 
 all: c63enc #c63dec c63pred
 
@@ -43,7 +54,7 @@ clean:
 	rm -f *.o c63enc temp/* $(OUTPUT_VIDEO)
 
 encode: c63enc
-	./c63enc -w $(WIDTH) -h $(HEIGHT) -o temp/test.c63 $(INPUT_VIDEO)
+	./c63enc -w $(WIDTH) -h $(HEIGHT) -f $(FRAMES) -o temp/test.c63 $(INPUT_VIDEO)
 decode:
 	./c63dec temp/test.c63 $(OUTPUT_VIDEO)
 
