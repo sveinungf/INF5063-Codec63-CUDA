@@ -30,10 +30,6 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
-// Temporary buffers
-int16_t *gpu_Y_16;
-int16_t *gpu_U_16;
-int16_t *gpu_V_16;
 
 // Get CPU cycle count
 uint64_t rdtsc(){
@@ -127,26 +123,27 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 	}
 
 	yuv_t* predicted = cm->curframe->predicted_gpu;
+	dct_t* residuals = cm->curframe->residuals_gpu;
 
 	/* DCT and Quantization */
 	dct_quantize(cm->curframe->orig_gpu->Y, predicted->Y, cm->padw[Y_COMPONENT],
-			cm->padh[Y_COMPONENT], gpu_Y_16, cm->curframe->residuals->Ydct,
+			cm->padh[Y_COMPONENT], residuals->Ydct, cm->curframe->residuals->Ydct,
 			Y_COMPONENT);
 
 	dct_quantize(cm->curframe->orig_gpu->U, predicted->U, cm->padw[U_COMPONENT],
-			cm->padh[U_COMPONENT], gpu_U_16, cm->curframe->residuals->Udct,
+			cm->padh[U_COMPONENT], residuals->Udct, cm->curframe->residuals->Udct,
 			U_COMPONENT);
 
 	dct_quantize(cm->curframe->orig_gpu->V, predicted->V, cm->padw[V_COMPONENT],
-			cm->padh[V_COMPONENT], gpu_V_16, cm->curframe->residuals->Vdct,
+			cm->padh[V_COMPONENT], residuals->Vdct, cm->curframe->residuals->Vdct,
 			V_COMPONENT);
 
 	/* Reconstruct frame for inter-prediction */
-	dequantize_idct(gpu_Y_16, predicted->Y,
+	dequantize_idct(residuals->Ydct, predicted->Y,
 			cm->ypw, cm->yph, cm->curframe->recons_gpu->Y, cm->curframe->recons->Y, Y_COMPONENT);
-	dequantize_idct(gpu_U_16, predicted->U,
+	dequantize_idct(residuals->Udct, predicted->U,
 			cm->upw, cm->uph, cm->curframe->recons_gpu->U, cm->curframe->recons->U, U_COMPONENT);
-	dequantize_idct(gpu_V_16, predicted->V,
+	dequantize_idct(residuals->Vdct, predicted->V,
 			cm->vpw, cm->vph, cm->curframe->recons_gpu->V, cm->curframe->recons->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
@@ -259,10 +256,6 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rowsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rowsUV * sizeof(int));
 
-	cudaMalloc(&gpu_Y_16, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t));
-	cudaMalloc(&gpu_U_16, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t));
-	cudaMalloc(&gpu_V_16, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t));
-
 	set_searchrange_boundaries_cuda(cm);
 }
 
@@ -276,10 +269,6 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.topsUV_gpu);
 	cudaFree(cm->cuda_me.bottomsY_gpu);
 	cudaFree(cm->cuda_me.bottomsUV_gpu);
-
-	cudaFree(gpu_Y_16);
-	cudaFree(gpu_U_16);
-	cudaFree(gpu_V_16);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
