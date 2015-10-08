@@ -38,23 +38,19 @@ uint64_t rdtsc(){
 }
 
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
-static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
+static bool read_yuv(FILE *file, struct c63_common *cm, yuv_t* image)
 {
   size_t len = 0;
-  yuv_t *image = (yuv_t*) malloc(sizeof(*image));
 
   /* Read Y. The size of Y is the same as the size of the image. The indices
      represents the color component (0 is Y, 1 is U, and 2 is V) */
-  image->Y = (uint8_t*) calloc(1, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]);
   len += fread(image->Y, 1, width*height, file);
 
   /* Read U. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y
      because (height/2)*(width/2) = (height*width)/4. */
-  image->U = (uint8_t*) calloc(1, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]);
   len += fread(image->U, 1, (width*height)/4, file);
 
   /* Read V. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y. */
-  image->V = (uint8_t*) calloc(1, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]);
   len += fread(image->V, 1, (width*height)/4, file);
 
   if (ferror(file))
@@ -65,27 +61,17 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 
   if (feof(file))
   {
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
-
-    return NULL;
+    return false;
   }
   else if (len != width*height*1.5)
   {
     fprintf(stderr, "Reached end of file, but incorrect bytes read.\n");
     fprintf(stderr, "Wrong input? (height: %d width: %d)\n", height, width);
 
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
-
-    return NULL;
+    return false;
   }
 
-  return image;
+  return true;
 }
 
 static void zero_out_prediction(struct c63_common* cm)
@@ -400,7 +386,6 @@ static void print_help()
 int main(int argc, char **argv)
 {
   int c;
-  yuv_t *image;
 
   if (argc == 1) { print_help(); }
 
@@ -462,11 +447,13 @@ int main(int argc, char **argv)
   uint64_t kCycleCountTotal = 0;
 # endif
 
+  yuv_t *image = create_image(cm);
+
   while (1)
   {
-    image = read_yuv(infile, cm);
+    bool ok = read_yuv(infile, cm, image);
 
-    if (!image) { break; }
+    if (!ok) { break; }
 
     printf("Encoding frame %d, ", numframes);
 
@@ -482,11 +469,6 @@ int main(int argc, char **argv)
     c63_encode_image(cm, image);
 # endif
 
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
-
     printf("Done!\n");
 
     ++numframes;
@@ -499,6 +481,7 @@ int main(int argc, char **argv)
   printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
 # endif
 
+  destroy_image(image);
   cleanup_cuda_data(cm);
 
   free_c63_enc(cm);

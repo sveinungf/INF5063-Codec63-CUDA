@@ -102,12 +102,6 @@ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_
 
 void destroy_frame(struct frame *f)
 {
-	/* First frame doesn't have a reconstructed frame to destroy */
-	if (!f)
-	{
-		return;
-	}
-
 	free(f->recons->Y);
 	free(f->recons->U);
 	free(f->recons->V);
@@ -157,6 +151,24 @@ struct frame* create_frame(struct c63_common *cm)
 			sizeof(struct macroblock));
 
 	return f;
+}
+
+void destroy_image(yuv_t *image)
+{
+	free(image->Y);
+	free(image->U);
+	free(image->V);
+	free(image);
+}
+
+yuv_t* create_image(struct c63_common *cm)
+{
+	yuv_t* image = (yuv_t*) malloc(sizeof(yuv_t));
+	image->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
+	image->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
+	image->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
+
+	return image;
 }
 
 void dump_image(yuv_t *image, int w, int h, FILE *fp)
