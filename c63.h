@@ -53,10 +53,6 @@ struct yuv
   uint8_t *Y;
   uint8_t *U;
   uint8_t *V;
-
-  uint8_t *Y_gpu;
-  uint8_t *U_gpu;
-  uint8_t *V_gpu;
 };
 
 struct dct
@@ -64,10 +60,6 @@ struct dct
   int16_t *Ydct;
   int16_t *Udct;
   int16_t *Vdct;
-
-  int16_t *Ydct_gpu;
-  int16_t *Udct_gpu;
-  int16_t *Vdct_gpu;
 };
 
 typedef struct yuv yuv_t;
@@ -89,17 +81,20 @@ struct macroblock
 struct frame
 {
   yuv_t *orig;        // Original input image
+  yuv_t *orig_gpu;
   yuv_t *recons;      // Reconstructed image
+  yuv_t *recons_gpu;
   yuv_t *predicted;   // Predicted frame from intra-prediction
+  yuv_t *predicted_gpu;
 
   dct_t *residuals;   // Difference between original image and predicted frame
+  dct_t *residuals_gpu;
 
   struct macroblock *mbs[COLOR_COMPONENTS];
   struct macroblock *mbs_gpu[COLOR_COMPONENTS];
 
   int keyframe;
 };
-
 
 struct cuda_data_me
 {

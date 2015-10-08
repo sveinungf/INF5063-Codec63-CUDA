@@ -80,9 +80,13 @@ static void zero_out_prediction(struct c63_common* cm)
 	memset(frame->predicted->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
 	memset(frame->predicted->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
 	memset(frame->predicted->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
+
+	cudaMemset(frame->predicted_gpu->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
+	cudaMemset(frame->predicted_gpu->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
+	cudaMemset(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
 }
 
-static void c63_encode_image(struct c63_common *cm, yuv_t *image)
+static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_gpu)
 {
   // Advance to next frame by swapping current and reference frame
   struct frame* temp = cm->refframe;
@@ -90,6 +94,7 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   cm->curframe = temp;
 
   cm->curframe->orig = image;
+  cm->curframe->orig_gpu = image_gpu;
 
   /* Check if keyframe */
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -318,11 +323,11 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_me.bottomsUV_gpu);
 }
 
-static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image)
+static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
 {
-	cudaMemcpy(image->Y_gpu, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image->U_gpu, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image->V_gpu, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->Y, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->U, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->V, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
 }
 
 struct c63_common* init_c63_enc(int width, int height)
@@ -455,6 +460,7 @@ int main(int argc, char **argv)
 # endif
 
   yuv_t *image = create_image(cm);
+  yuv_t *image_gpu = create_image_gpu(cm);
 
   while (1)
   {
@@ -462,7 +468,7 @@ int main(int argc, char **argv)
 
     if (!ok) { break; }
 
-    copy_image_to_gpu(cm, image);
+    copy_image_to_gpu(cm, image, image_gpu);
 
     printf("Encoding frame %d, ", numframes);
 
@@ -475,7 +481,7 @@ int main(int argc, char **argv)
     kCycleCountTotal += kCycleCount;
     printf("%" PRIu64 "k cycles, ", kCycleCount);
 # else
-    c63_encode_image(cm, image);
+    c63_encode_image(cm, image, image_gpu);
 # endif
 
     printf("Done!\n");
@@ -491,6 +497,7 @@ int main(int argc, char **argv)
 # endif
 
   destroy_image(image);
+  destroy_image_gpu(image_gpu);
   cleanup_cuda_data(cm);
 
   free_c63_enc(cm);
