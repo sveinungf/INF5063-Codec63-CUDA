@@ -30,16 +30,6 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
-// Temporary buffers
-int16_t *gpu_Y_16;
-uint8_t *gpu_Y_pred;
-
-int16_t *gpu_U_16;
-uint8_t *gpu_U_pred;
-
-int16_t *gpu_V_16;
-uint8_t *gpu_V_pred;
-
 cudaStream_t stream1, stream2, stream3;
 
 
@@ -188,10 +178,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 	while(cudaSuccess != cudaStreamQuery(stream3)) {}
 	*/
 
-	/*cudaStreamSynchronize(stream1);
-	cudaStreamSynchronize(stream2);
-	cudaStreamSynchronize(stream3);
-	 */
 	cudaStreamDestroy(stream1);
 	cudaStreamDestroy(stream2);
 	cudaStreamDestroy(stream3);

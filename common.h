@@ -19,20 +19,6 @@ void dct_quantize(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_dat
 __global__
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_data, int quantization);
 
-__global__
-void dct_quantize_blocks(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_data,
-		int quantization);
-
-__host__
-void dct_quantize2(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		int16_t *gpu_out_data, int16_t *out_data, int quantization);
-
-__global__
-void dequantize_idct_blocks(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_data, int quantization);
-
-__host__
-void dequantize_idct2(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		uint8_t *out_data, int quantization);
 
 void destroy_frame(struct frame *f);
 

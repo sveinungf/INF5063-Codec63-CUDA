@@ -211,9 +211,6 @@ void c63_motion_estimate(struct c63_common *cm)
 		status2 = cudaStreamQuery(me_stream2);
 		status3 = cudaStreamQuery(me_stream3);
 	}
-	//while(cudaSuccess != cudaStreamQuery(me_stream1)) {}
-	//while(cudaSuccess != cudaStreamQuery(me_stream2)) {}
-	//while(cudaSuccess != cudaStreamQuery(me_stream3)) {}
 
 	//cudaStreamDestroy(me_stream1);
 	//cudaStreamDestroy(me_stream2);
