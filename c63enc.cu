@@ -39,7 +39,7 @@ uint64_t rdtsc(){
 }
 
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
-static bool read_yuv(FILE *file, struct c63_common *cm, yuv_t* image)
+static bool read_yuv(FILE *file, yuv_t* image)
 {
   size_t len = 0;
 
@@ -431,7 +431,7 @@ int main(int argc, char **argv)
 
 	while (1)
 	{
-		bool ok = read_yuv(infile, cm, image);
+		bool ok = read_yuv(infile, image);
 
 		if (!ok) { break; }
 
