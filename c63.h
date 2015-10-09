@@ -96,6 +96,10 @@ struct frame
 
 struct cuda_data_me
 {
+	cudaStream_t streamY;
+	cudaStream_t streamU;
+	cudaStream_t streamV;
+
 	int* leftsY_gpu;
 	int* leftsUV_gpu;
 	int* rightsY_gpu;
