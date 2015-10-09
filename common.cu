@@ -13,19 +13,16 @@ extern "C" {
 #include "dsp.h"
 
 
-__shared__ float dct_in[64];
-__shared__ float dct_out[64];
-__shared__ float idct_in[64];
-__shared__ float idct_out[64];
-
-
 __global__
-void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_data, int quantization)
+void dequantize_idct(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_data, int quantization)
 {
 	int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
 
  	int i = threadIdx.y;
  	int j = threadIdx.x;
+
+ 	__shared__ float idct_in[64];
+ 	__shared__ float idct_out[64];
 
  	idct_in[i*8+j] = (float) in_data[block_offset + i*8+j];
  	__syncthreads();
@@ -47,20 +44,10 @@ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, uint8_t *
 	out_data[offset] = tmp;
 }
 
-__host__
-void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		uint8_t *gpu_out_data, int quantization)
-{
-	dim3 threadsPerBlock(8, 8);
-	dim3 numBlocks(width/threadsPerBlock.x, height/threadsPerBlock.y);
-
-	dequantize_idct_row<<<numBlocks, threadsPerBlock>>>(in_data, prediction, width, gpu_out_data, quantization);
-}
 
 
 __global__
-void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_data,
-		int quantization)
+void dct_quantize(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_data, int quantization)
 {
 	int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
 
@@ -69,6 +56,9 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out
 
 	int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i*w+j;
 
+	__shared__ float dct_in[64];
+	__shared__ float dct_out[64];
+
 	dct_in[i*8+j] = ((float) in_data[offset] - prediction[offset]);
 	__syncthreads();
 	dct_quant_block_8x8(dct_in, dct_out, quantization, i, j);
@@ -76,17 +66,6 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out
 	out_data[block_offset + i*8+j] = dct_in[i*8+j];
 }
 
-__host__
-void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
-		int16_t *gpu_out_data, int16_t *out_data, int quantization)
-{
-	dim3 threadsPerBlock(8, 8);
-	dim3 numBlocks(width/threadsPerBlock.x, height/threadsPerBlock.y);
-
-	dct_quantize_row<<<numBlocks, threadsPerBlock>>>(in_data, prediction, width,
-				gpu_out_data, quantization);
-	cudaMemcpy(out_data, gpu_out_data, width*height*sizeof(int16_t), cudaMemcpyDeviceToHost);
-}
 
 static void init_frame_gpu(struct c63_common* cm, struct frame* f)
 {
@@ -121,18 +100,28 @@ static void deinit_frame_gpu(struct frame* f)
 	cudaFree(f->mbs_gpu[V_COMPONENT]);
 }
 
+struct macroblock *create_mb(struct macroblock *mb, size_t size) {
+	cudaMallocHost((void**)&mb, size);
+	cudaMemset(mb, 0, size);
+
+	return mb;
+}
+
 struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
 
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
-	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
-	f->residuals->Udct = (int16_t*) malloc(cm->upw * cm->uph * sizeof(int16_t));
-	f->residuals->Vdct = (int16_t*) malloc(cm->vpw * cm->vph * sizeof(int16_t));
+	cudaMallocHost((void**)&f->residuals->Ydct, cm->ypw * cm->yph * sizeof(int16_t));
+	cudaMallocHost((void**)&f->residuals->Udct, cm->upw * cm->uph * sizeof(int16_t));
+	cudaMallocHost((void**)&f->residuals->Vdct, cm->vpw * cm->vph * sizeof(int16_t));
 
-	f->mbs[Y_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY, sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
+	//f->mbs[Y_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY, sizeof(struct macroblock));
+	//f->mbs[U_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
+	//f->mbs[V_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
+	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock));
+	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
+	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
 
 	init_frame_gpu(cm, f);
 
@@ -143,14 +132,14 @@ void destroy_frame(struct frame *f)
 {
 	deinit_frame_gpu(f);
 
-	free(f->residuals->Ydct);
-	free(f->residuals->Udct);
-	free(f->residuals->Vdct);
+	cudaFree(f->residuals->Ydct);
+	cudaFree(f->residuals->Udct);
+	cudaFree(f->residuals->Vdct);
 	free(f->residuals);
 
-	free(f->mbs[Y_COMPONENT]);
-	free(f->mbs[U_COMPONENT]);
-	free(f->mbs[V_COMPONENT]);
+	cudaFree(f->mbs[Y_COMPONENT]);
+	cudaFree(f->mbs[U_COMPONENT]);
+	cudaFree(f->mbs[V_COMPONENT]);
 
 	free(f);
 }
@@ -158,18 +147,21 @@ void destroy_frame(struct frame *f)
 yuv_t* create_image(struct c63_common *cm)
 {
 	yuv_t* image = (yuv_t*) malloc(sizeof(yuv_t));
-	image->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
-	image->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
-	image->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
+	cudaHostAlloc((void**)&image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaHostAllocWriteCombined);
+	cudaHostAlloc((void**)&image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaHostAllocWriteCombined);
+	cudaHostAlloc((void**)&image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaHostAllocWriteCombined);
+	//image->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
+	//image->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
+	//image->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
 
 	return image;
 }
 
 void destroy_image(yuv_t *image)
 {
-	free(image->Y);
-	free(image->U);
-	free(image->V);
+	cudaFree(image->Y);
+	cudaFree(image->U);
+	cudaFree(image->V);
 	free(image);
 }
 

@@ -30,6 +30,8 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
+cudaStream_t stream1, stream2, stream3;
+
 
 // Get CPU cycle count
 uint64_t rdtsc(){
@@ -121,26 +123,70 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 	yuv_t* predicted = cm->curframe->predicted_gpu;
 	dct_t* residuals = cm->curframe->residuals_gpu;
 
+	const dim3 threadsPerBlock(8, 8);
+
+	const dim3 numBlocks_Y(cm->padw[Y_COMPONENT]/threadsPerBlock.x, cm->padh[Y_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_U(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_V(cm->padw[V_COMPONENT]/threadsPerBlock.x, cm->padh[V_COMPONENT]/threadsPerBlock.y);
+
+	cudaStreamCreate(&stream1);
+	cudaStreamCreate(&stream2);
+	cudaStreamCreate(&stream3);
+
 	/* DCT and Quantization */
-	dct_quantize(cm->curframe->orig_gpu->Y, predicted->Y, cm->padw[Y_COMPONENT],
-			cm->padh[Y_COMPONENT], residuals->Ydct, cm->curframe->residuals->Ydct,
-			Y_COMPONENT);
+	dct_quantize<<<numBlocks_Y, threadsPerBlock, 0, stream1>>>(cm->curframe->orig_gpu->Y, predicted->Y,
+			cm->padw[Y_COMPONENT], residuals->Ydct, Y_COMPONENT);
+	cudaMemcpyAsync(cm->curframe->residuals->Ydct, residuals->Ydct, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t),
+			cudaMemcpyDeviceToHost, stream1);
 
-	dct_quantize(cm->curframe->orig_gpu->U, predicted->U, cm->padw[U_COMPONENT],
-			cm->padh[U_COMPONENT], residuals->Udct, cm->curframe->residuals->Udct,
-			U_COMPONENT);
+	dct_quantize<<<numBlocks_U, threadsPerBlock, 0, stream2>>>(cm->curframe->orig_gpu->U, predicted->U,
+			cm->padw[U_COMPONENT], residuals->Udct, U_COMPONENT);
+	cudaMemcpyAsync(cm->curframe->residuals->Udct, residuals->Udct, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t),
+			cudaMemcpyDeviceToHost, stream2);
 
-	dct_quantize(cm->curframe->orig_gpu->V, predicted->V, cm->padw[V_COMPONENT],
-			cm->padh[V_COMPONENT], residuals->Vdct, cm->curframe->residuals->Vdct,
-			V_COMPONENT);
+	dct_quantize<<<numBlocks_V, threadsPerBlock, 0, stream3>>>(cm->curframe->orig_gpu->V, predicted->V,
+			cm->padw[V_COMPONENT], residuals->Vdct, V_COMPONENT);
+	cudaMemcpyAsync(cm->curframe->residuals->Vdct, residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t),
+			cudaMemcpyDeviceToHost, stream3);
+
 
 	/* Reconstruct frame for inter-prediction */
-	dequantize_idct(residuals->Ydct, predicted->Y, cm->ypw, cm->yph, cm->curframe->recons_gpu->Y, Y_COMPONENT);
-	dequantize_idct(residuals->Udct, predicted->U, cm->upw, cm->uph, cm->curframe->recons_gpu->U, U_COMPONENT);
-	dequantize_idct(residuals->Vdct, predicted->V, cm->vpw, cm->vph, cm->curframe->recons_gpu->V, V_COMPONENT);
+	dequantize_idct<<<numBlocks_Y, threadsPerBlock>>>(residuals->Ydct, predicted->Y,
+			cm->ypw, cm->curframe->recons_gpu->Y, Y_COMPONENT);
+
+	dequantize_idct<<<numBlocks_U, threadsPerBlock>>>(residuals->Udct, predicted->U,
+			cm->upw, cm->curframe->recons_gpu->U, U_COMPONENT);
+
+	dequantize_idct<<<numBlocks_V, threadsPerBlock>>>(residuals->Vdct, predicted->V,
+			cm->vpw, cm->curframe->recons_gpu->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
+
+	/*
+	cudaError_t status1, status2, status3;
+	status1 = cudaStreamQuery(stream1);
+	status2 = cudaStreamQuery(stream2);
+	status3 = cudaStreamQuery(stream3);
+	while(status1 != status2 != status3 != cudaSuccess) {
+		status1 = cudaStreamQuery(stream1);
+		status2 = cudaStreamQuery(stream2);
+		status3 = cudaStreamQuery(stream3);
+	}
+	*/
+	while(cudaSuccess != cudaStreamQuery(stream1)) {}
+	while(cudaSuccess != cudaStreamQuery(stream2)) {}
+	while(cudaSuccess != cudaStreamQuery(stream3)) {}
+
+	/*
+	cudaStreamSynchronize(stream1);
+	cudaStreamSynchronize(stream2);
+	cudaStreamSynchronize(stream3);
+	*/
+
+	cudaStreamDestroy(stream1);
+	cudaStreamDestroy(stream2);
+	cudaStreamDestroy(stream3);
 
 	write_frame(cm);
 
