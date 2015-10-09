@@ -19,8 +19,8 @@ ALL_NVCCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
 
 ALL_LDFLAGS = $(addprefix -Xlinker ,$(LDFLAGS))
 
-VIDEO ?= 0
-FRAMES ?= 0
+VIDEO ?= 1
+FRAMES ?= 30
 
 ifeq ($(VIDEO),0)
 	WIDTH = 352

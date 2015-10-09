@@ -1,4 +1,3 @@
-extern "C" {
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
@@ -9,11 +8,12 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 
-#include "c63.h"
-#include "c63_write.h"
+extern "C" {
 #include "tables.h"
 }
 
+#include "c63.h"
+#include "c63_write.h"
 #include "common.h"
 #include "dsp.h"
 #include "me.h"

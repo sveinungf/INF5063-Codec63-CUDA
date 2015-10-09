@@ -7,10 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern "C" {
+#include "tables.h"
+}
+
 #include "c63.h"
 #include "c63_write.h"
 #include "io.h"
-#include "tables.h"
 
 int frequencies[2][12];
 
