@@ -369,21 +369,28 @@ static void deinit_frame_gpu(struct frame* f)
 	cudaFree(f->mbs_gpu[V_COMPONENT]);
 }
 
+struct macroblock *create_mb(struct macroblock *mb, size_t size) {
+	cudaMallocHost((void**)&mb, size);
+	cudaMemset(mb, 0, size);
+
+	return mb;
+}
 
 struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
 
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
-	//cudaMallocHost((void**)&f->residuals->Ydct, cm->ypw * cm->yph * sizeof(int16_t));
-	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
-	f->residuals->Udct = (int16_t*) malloc(cm->upw * cm->uph * sizeof(int16_t));
-	//cudaMallocHost((void**)&f->residuals->Udct, cm->upw * cm->uph * sizeof(int16_t));
-	f->residuals->Vdct = (int16_t*) malloc(cm->vpw * cm->vph * sizeof(int16_t));
+	cudaMallocHost((void**)&f->residuals->Ydct, cm->ypw * cm->yph * sizeof(int16_t));
+	cudaMallocHost((void**)&f->residuals->Udct, cm->upw * cm->uph * sizeof(int16_t));
+	cudaMallocHost((void**)&f->residuals->Vdct, cm->vpw * cm->vph * sizeof(int16_t));
 
-	f->mbs[Y_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY, sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
+	//f->mbs[Y_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY, sizeof(struct macroblock));
+	//f->mbs[U_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
+	//f->mbs[V_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
+	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock));
+	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
+	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
 
 	init_frame_gpu(cm, f);
 
@@ -394,14 +401,14 @@ void destroy_frame(struct frame *f)
 {
 	deinit_frame_gpu(f);
 
-	free(f->residuals->Ydct);
-	free(f->residuals->Udct);
-	free(f->residuals->Vdct);
+	cudaFree(f->residuals->Ydct);
+	cudaFree(f->residuals->Udct);
+	cudaFree(f->residuals->Vdct);
 	free(f->residuals);
 
-	free(f->mbs[Y_COMPONENT]);
-	free(f->mbs[U_COMPONENT]);
-	free(f->mbs[V_COMPONENT]);
+	cudaFree(f->mbs[Y_COMPONENT]);
+	cudaFree(f->mbs[U_COMPONENT]);
+	cudaFree(f->mbs[V_COMPONENT]);
 
 	free(f);
 }
@@ -412,9 +419,6 @@ yuv_t* create_image(struct c63_common *cm)
 	image->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
 	image->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
 	image->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
-	//cudaMallocHost((void**)&image->Y, cm->ypw * cm->yph * sizeof(uint8_t));
-	//cudaMallocHost((void**)&image->U, cm->upw * cm->uph * sizeof(uint8_t));
-	//cudaMallocHost((void**)&image->V, cm->vpw * cm->vph * sizeof(uint8_t));
 
 	return image;
 }
