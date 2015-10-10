@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <utility>
 
 extern "C" {
 #include "tables.h"
@@ -86,9 +87,7 @@ static void zero_out_prediction(struct c63_common* cm)
 static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_gpu)
 {
 	// Advance to next frame by swapping current and reference frame
-	struct frame* temp = cm->refframe;
-	cm->refframe = cm->curframe;
-	cm->curframe = temp;
+	std::swap(cm->curframe, cm->refframe);
 
 	cm->curframe->orig = image;
 	cm->curframe->orig_gpu = image_gpu;
@@ -353,13 +352,6 @@ static void print_help()
   exit(EXIT_FAILURE);
 }
 
-static void swap_recons(struct c63_common* cm, struct c63_common* cm2)
-{
-	yuv_t* temp = cm->curframe->recons_gpu;
-	cm->curframe->recons_gpu = cm2->curframe->recons_gpu;
-	cm2->curframe->recons_gpu = temp;
-}
-
 int main(int argc, char **argv)
 {
 	int c;
@@ -446,13 +438,14 @@ int main(int argc, char **argv)
 
 		while (!limit_numframes || numframes < limit_numframes)
 		{
-			bool ok2 = read_yuv(infile, image2);		// read image 2 from disk
-			if (!ok2)
+			ok = read_yuv(infile, image2);		// read image 2 from disk
+			if (!ok)
 			{
 				break;
 			}
 
-			swap_recons(cm, cm2);
+			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
+
 			cudaStreamSynchronize(cm->cuda_me.streamY);
 			cudaStreamSynchronize(cm->cuda_me.streamU);
 			cudaStreamSynchronize(cm->cuda_me.streamV);	// image 1 done encoding
@@ -484,7 +477,8 @@ int main(int argc, char **argv)
 				break;
 			}
 
-			swap_recons(cm, cm2);
+			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
+
 			cudaStreamSynchronize(cm2->cuda_me.streamY);
 			cudaStreamSynchronize(cm2->cuda_me.streamU);
 			cudaStreamSynchronize(cm2->cuda_me.streamV); // image 2 done encoding
