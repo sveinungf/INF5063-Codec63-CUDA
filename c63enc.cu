@@ -126,29 +126,29 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 	const dim3 numBlocks_V(cm->padw[V_COMPONENT]/threadsPerBlock.x, cm->padh[V_COMPONENT]/threadsPerBlock.y);
 
 	/* DCT and Quantization */
-	dct_quantize<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_me.streamY>>>(cm->curframe->orig_gpu->Y, predicted->Y,
+	dct_quantize<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_data.streamY>>>(cm->curframe->orig_gpu->Y, predicted->Y,
 			cm->padw[Y_COMPONENT], residuals->Ydct, Y_COMPONENT);
 	cudaMemcpyAsync(cm->curframe->residuals->Ydct, residuals->Ydct, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t),
-			cudaMemcpyDeviceToHost, cm->cuda_me.streamY);
+			cudaMemcpyDeviceToHost, cm->cuda_data.streamY);
 
-	dct_quantize<<<numBlocks_U, threadsPerBlock, 0, cm->cuda_me.streamU>>>(cm->curframe->orig_gpu->U, predicted->U,
+	dct_quantize<<<numBlocks_U, threadsPerBlock, 0, cm->cuda_data.streamU>>>(cm->curframe->orig_gpu->U, predicted->U,
 			cm->padw[U_COMPONENT], residuals->Udct, U_COMPONENT);
 	cudaMemcpyAsync(cm->curframe->residuals->Udct, residuals->Udct, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t),
-			cudaMemcpyDeviceToHost, cm->cuda_me.streamU);
+			cudaMemcpyDeviceToHost, cm->cuda_data.streamU);
 
-	dct_quantize<<<numBlocks_V, threadsPerBlock, 0, cm->cuda_me.streamV>>>(cm->curframe->orig_gpu->V, predicted->V,
+	dct_quantize<<<numBlocks_V, threadsPerBlock, 0, cm->cuda_data.streamV>>>(cm->curframe->orig_gpu->V, predicted->V,
 			cm->padw[V_COMPONENT], residuals->Vdct, V_COMPONENT);
 	cudaMemcpyAsync(cm->curframe->residuals->Vdct, residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t),
-			cudaMemcpyDeviceToHost, cm->cuda_me.streamV);
+			cudaMemcpyDeviceToHost, cm->cuda_data.streamV);
 
 	/* Reconstruct frame for inter-prediction */
-	dequantize_idct<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_me.streamY>>>(residuals->Ydct, predicted->Y,
+	dequantize_idct<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_data.streamY>>>(residuals->Ydct, predicted->Y,
 			cm->ypw, cm->curframe->recons_gpu->Y, Y_COMPONENT);
 
-	dequantize_idct<<<numBlocks_U, threadsPerBlock, 0, cm->cuda_me.streamU>>>(residuals->Udct, predicted->U,
+	dequantize_idct<<<numBlocks_U, threadsPerBlock, 0, cm->cuda_data.streamU>>>(residuals->Udct, predicted->U,
 			cm->upw, cm->curframe->recons_gpu->U, U_COMPONENT);
 
-	dequantize_idct<<<numBlocks_V, threadsPerBlock, 0, cm->cuda_me.streamV>>>(residuals->Vdct, predicted->V,
+	dequantize_idct<<<numBlocks_V, threadsPerBlock, 0, cm->cuda_data.streamV>>>(residuals->Vdct, predicted->V,
 			cm->vpw, cm->curframe->recons_gpu->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
@@ -224,14 +224,14 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 		}
 	}
 
-	cudaMemcpy(cm->cuda_me.leftsY_gpu, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.leftsUV_gpu, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.rightsY_gpu, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.rightsUV_gpu, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.topsY_gpu, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.topsUV_gpu, topsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.bottomsY_gpu, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_me.bottomsUV_gpu, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.leftsY_gpu, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.leftsUV_gpu, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.rightsY_gpu, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.rightsUV_gpu, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.topsY_gpu, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.topsUV_gpu, topsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.bottomsY_gpu, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(cm->cuda_data.bottomsUV_gpu, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
 
 	delete[] leftsY;
 	delete[] leftsUV;
@@ -245,7 +245,7 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 
 static void init_cuda_data(c63_common* cm)
 {
-	cuda_data_me* cuda_me = &(cm->cuda_me);
+	cuda_data* cuda_me = &(cm->cuda_data);
 
 	cudaStreamCreate(&cuda_me->streamY);
 	cudaStreamCreate(&cuda_me->streamU);
@@ -265,25 +265,25 @@ static void init_cuda_data(c63_common* cm)
 
 static void cleanup_cuda_data(c63_common* cm)
 {
-	cudaStreamDestroy(cm->cuda_me.streamY);
-	cudaStreamDestroy(cm->cuda_me.streamU);
-	cudaStreamDestroy(cm->cuda_me.streamV);
+	cudaStreamDestroy(cm->cuda_data.streamY);
+	cudaStreamDestroy(cm->cuda_data.streamU);
+	cudaStreamDestroy(cm->cuda_data.streamV);
 
-	cudaFree(cm->cuda_me.leftsY_gpu);
-	cudaFree(cm->cuda_me.leftsUV_gpu);
-	cudaFree(cm->cuda_me.rightsY_gpu);
-	cudaFree(cm->cuda_me.rightsUV_gpu);
-	cudaFree(cm->cuda_me.topsY_gpu);
-	cudaFree(cm->cuda_me.topsUV_gpu);
-	cudaFree(cm->cuda_me.bottomsY_gpu);
-	cudaFree(cm->cuda_me.bottomsUV_gpu);
+	cudaFree(cm->cuda_data.leftsY_gpu);
+	cudaFree(cm->cuda_data.leftsUV_gpu);
+	cudaFree(cm->cuda_data.rightsY_gpu);
+	cudaFree(cm->cuda_data.rightsUV_gpu);
+	cudaFree(cm->cuda_data.topsY_gpu);
+	cudaFree(cm->cuda_data.topsUV_gpu);
+	cudaFree(cm->cuda_data.bottomsY_gpu);
+	cudaFree(cm->cuda_data.bottomsUV_gpu);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
 {
-	cudaMemcpyAsync(image_gpu->Y, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice, cm->cuda_me.streamY);
-	cudaMemcpyAsync(image_gpu->U, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice, cm->cuda_me.streamU);
-	cudaMemcpyAsync(image_gpu->V, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice, cm->cuda_me.streamV);
+	cudaMemcpyAsync(image_gpu->Y, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice, cm->cuda_data.streamY);
+	cudaMemcpyAsync(image_gpu->U, image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice, cm->cuda_data.streamU);
+	cudaMemcpyAsync(image_gpu->V, image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice, cm->cuda_data.streamV);
 }
 
 struct c63_common* init_c63_enc(int width, int height)
@@ -447,9 +447,9 @@ int main(int argc, char **argv)
 			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
 
 			// Wait until the previous image has been encoded
-			cudaStreamSynchronize(cm->cuda_me.streamY);
-			cudaStreamSynchronize(cm->cuda_me.streamU);
-			cudaStreamSynchronize(cm->cuda_me.streamV);
+			cudaStreamSynchronize(cm->cuda_data.streamY);
+			cudaStreamSynchronize(cm->cuda_data.streamU);
+			cudaStreamSynchronize(cm->cuda_data.streamV);
 			printf("Done!\n");
 
 			// Copy the current image to GPU asynchronously
@@ -473,9 +473,9 @@ int main(int argc, char **argv)
 		}
 
 		// Wait until the last image has been encoded
-		cudaStreamSynchronize(cm->cuda_me.streamY);
-		cudaStreamSynchronize(cm->cuda_me.streamU);
-		cudaStreamSynchronize(cm->cuda_me.streamV);
+		cudaStreamSynchronize(cm->cuda_data.streamY);
+		cudaStreamSynchronize(cm->cuda_data.streamU);
+		cudaStreamSynchronize(cm->cuda_data.streamV);
 		printf("Done!\n");
 
 		// Write the last frame to disk

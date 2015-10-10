@@ -93,7 +93,7 @@ struct frame
   int keyframe;
 };
 
-struct cuda_data_me
+struct cuda_data
 {
 	cudaStream_t streamY;
 	cudaStream_t streamU;
@@ -135,7 +135,7 @@ struct c63_common
 
   struct entropy_ctx e_ctx;
 
-  struct cuda_data_me cuda_me;
+  struct cuda_data cuda_data;
 };
 
 #endif  /* C63_C63_H_ */
