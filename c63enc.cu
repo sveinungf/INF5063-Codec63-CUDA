@@ -416,17 +416,18 @@ int main(int argc, char **argv)
 
 	yuv_t *image = create_image(cm);
 	yuv_t *image_gpu = create_image_gpu(cm);
-	yuv_t *image2_gpu = create_image_gpu(cm2);
 
-	bool odd_number_of_frames = true;
+	// Read the first image (image 0) from disk
 	bool ok = read_yuv(infile, image);
 
 	if (ok) {
+		// Copy the first image to GPU asynchronously
 		copy_image_to_gpu(cm, image, image_gpu);
 
 		printf("Encoding frame %d, ", numframes);
 		++numframes;
 
+		// Start encoding the first image asynchronously
 		c63_encode_image(cm, image_gpu);
 		++cm->framenum;
 		++cm->frames_since_keyframe;
@@ -435,89 +436,54 @@ int main(int argc, char **argv)
 
 		while (!limit_numframes || numframes < limit_numframes)
 		{
-			ok = read_yuv(infile, image);		// read image 2 from disk
+			// Read the current image from disk
+			ok = read_yuv(infile, image);
 			if (!ok)
 			{
 				break;
 			}
 
+			// We need the reconstructed previous image
 			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
 
-			cudaStreamSynchronize(cm->cuda_me.streamY);
-			cudaStreamSynchronize(cm->cuda_me.streamU);
-			cudaStreamSynchronize(cm->cuda_me.streamV);	// image 1 done encoding
-			printf("Done!\n");
-
-			copy_image_to_gpu(cm2, image, image2_gpu);	// copy image 2 to gpu
-
-			printf("Encoding frame %d, ", numframes);
-			++numframes;
-
-			c63_encode_image(cm2, image2_gpu);	// start encoding image 2
-			++cm->framenum;
-			++cm->frames_since_keyframe;
-			++cm2->framenum;
-			++cm2->frames_since_keyframe;
-
-			write_frame(cm);							// write encoded image1 to disk
-
-			if (limit_numframes && numframes >= limit_numframes)
-			{
-				odd_number_of_frames = false;
-				break;
-			}
-
-			ok = read_yuv(infile, image);			// read image3 from disk
-			if (!ok)
-			{
-				odd_number_of_frames = false;
-				break;
-			}
-
-			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
-
-			cudaStreamSynchronize(cm2->cuda_me.streamY);
-			cudaStreamSynchronize(cm2->cuda_me.streamU);
-			cudaStreamSynchronize(cm2->cuda_me.streamV); // image 2 done encoding
-			printf("Done!\n");
-
-			copy_image_to_gpu(cm, image, image_gpu);	// copy image 3 to gpu
-
-			printf("Encoding frame %d, ", numframes);
-			++numframes;
-
-			c63_encode_image(cm, image_gpu);		// start encoding image 3
-			++cm->framenum;
-			++cm->frames_since_keyframe;
-			++cm2->framenum;
-			++cm2->frames_since_keyframe;
-
-			write_frame(cm2);
-		}
-
-		if (odd_number_of_frames)
-		{
+			// Wait until the previous image has been encoded
 			cudaStreamSynchronize(cm->cuda_me.streamY);
 			cudaStreamSynchronize(cm->cuda_me.streamU);
 			cudaStreamSynchronize(cm->cuda_me.streamV);
 			printf("Done!\n");
 
-			write_frame(cm);
-		}
-		else
-		{
-			cudaStreamSynchronize(cm2->cuda_me.streamY);
-			cudaStreamSynchronize(cm2->cuda_me.streamU);
-			cudaStreamSynchronize(cm2->cuda_me.streamV);
-			printf("Done!\n");
+			// Copy the current image to GPU asynchronously
+			copy_image_to_gpu(cm2, image, image_gpu);
 
-			write_frame(cm2);
+			printf("Encoding frame %d, ", numframes);
+			++numframes;
+
+			// Start encoding the current image asynchronously
+			c63_encode_image(cm2, image_gpu);
+			++cm->framenum;
+			++cm->frames_since_keyframe;
+			++cm2->framenum;
+			++cm2->frames_since_keyframe;
+
+			// While the GPU is busy, we can write the previous frame to disk
+			write_frame(cm);
+
+			// Swap the pointers so we can use this loop for even and odd numbered images
+			std::swap(cm, cm2);
 		}
+
+		// Wait until the last image has been encoded
+		cudaStreamSynchronize(cm->cuda_me.streamY);
+		cudaStreamSynchronize(cm->cuda_me.streamU);
+		cudaStreamSynchronize(cm->cuda_me.streamV);
+		printf("Done!\n");
+
+		// Write the last frame to disk
+		write_frame(cm);
 	}
 
 	destroy_image(image);
 	destroy_image_gpu(image_gpu);
-	destroy_image_gpu(image2_gpu);
 
 	cleanup_cuda_data(cm);
 	free_c63_enc(cm);
