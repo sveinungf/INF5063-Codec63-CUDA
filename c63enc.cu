@@ -429,61 +429,100 @@ int main(int argc, char **argv)
 	yuv_t *image2 = create_image(cm2);
 	yuv_t *image2_gpu = create_image_gpu(cm2);
 
-	bool first = true;
+	bool odd_number_of_frames = true;
+	bool ok = read_yuv(infile, image);
 
-	while (1)
-	{
-		bool ok = read_yuv(infile, image);
-		if (!ok) { break; }
+	if (ok) {
 		copy_image_to_gpu(cm, image, image_gpu);
 
 		printf("Encoding frame %d, ", numframes);
 		++numframes;
 
 		c63_encode_image(cm, image, image_gpu);
-		swap_recons(cm, cm2);
 		++cm->framenum;
 		++cm->frames_since_keyframe;
 		++cm2->framenum;
 		++cm2->frames_since_keyframe;
 
-		if (!first) {
+		while (!limit_numframes || numframes < limit_numframes)
+		{
+			bool ok2 = read_yuv(infile, image2);		// read image 2 from disk
+			if (!ok2)
+			{
+				break;
+			}
+
+			swap_recons(cm, cm2);
+			cudaStreamSynchronize(cm->cuda_me.streamY);
+			cudaStreamSynchronize(cm->cuda_me.streamU);
+			cudaStreamSynchronize(cm->cuda_me.streamV);	// image 1 done encoding
+			printf("Done!\n");
+
+			copy_image_to_gpu(cm2, image2, image2_gpu);	// copy image 2 to gpu
+
+			printf("Encoding frame %d, ", numframes);
+			++numframes;
+
+			c63_encode_image(cm2, image2, image2_gpu);	// start encoding image 2
+			++cm->framenum;
+			++cm->frames_since_keyframe;
+			++cm2->framenum;
+			++cm2->frames_since_keyframe;
+
+			write_frame(cm);							// write encoded image1 to disk
+
+			if (limit_numframes && numframes >= limit_numframes)
+			{
+				odd_number_of_frames = false;
+				break;
+			}
+
+			ok = read_yuv(infile, image);			// read image3 from disk
+			if (!ok)
+			{
+				odd_number_of_frames = false;
+				break;
+			}
+
+			swap_recons(cm, cm2);
+			cudaStreamSynchronize(cm2->cuda_me.streamY);
+			cudaStreamSynchronize(cm2->cuda_me.streamU);
+			cudaStreamSynchronize(cm2->cuda_me.streamV); // image 2 done encoding
+			printf("Done!\n");
+
+			copy_image_to_gpu(cm, image, image_gpu);	// copy image 3 to gpu
+
+			printf("Encoding frame %d, ", numframes);
+			++numframes;
+
+			c63_encode_image(cm, image, image_gpu);		// start encoding image 3
+			++cm->framenum;
+			++cm->frames_since_keyframe;
+			++cm2->framenum;
+			++cm2->frames_since_keyframe;
+
 			write_frame(cm2);
-		} else {
-			first = false;
 		}
 
-		bool ok2 = read_yuv(infile, image2);
-		if (!ok2) { break; }
+		if (odd_number_of_frames)
+		{
+			cudaStreamSynchronize(cm->cuda_me.streamY);
+			cudaStreamSynchronize(cm->cuda_me.streamU);
+			cudaStreamSynchronize(cm->cuda_me.streamV);
+			printf("Done!\n");
 
-		cudaStreamSynchronize(cm->cuda_me.streamY);
-		cudaStreamSynchronize(cm->cuda_me.streamU);
-		cudaStreamSynchronize(cm->cuda_me.streamV);
-		printf("Done!\n");
+			write_frame(cm);
+		}
+		else
+		{
+			cudaStreamSynchronize(cm2->cuda_me.streamY);
+			cudaStreamSynchronize(cm2->cuda_me.streamU);
+			cudaStreamSynchronize(cm2->cuda_me.streamV);
+			printf("Done!\n");
 
-		copy_image_to_gpu(cm2, image2, image2_gpu);
-
-		printf("Encoding frame %d, ", numframes);
-		++numframes;
-
-		c63_encode_image(cm2, image2, image2_gpu);
-		swap_recons(cm2, cm);
-		++cm->framenum;
-		++cm->frames_since_keyframe;
-		++cm2->framenum;
-		++cm2->frames_since_keyframe;
-
-		write_frame(cm);
-
-		cudaStreamSynchronize(cm2->cuda_me.streamY);
-		cudaStreamSynchronize(cm2->cuda_me.streamU);
-		cudaStreamSynchronize(cm2->cuda_me.streamV);
-		printf("Done!\n");
-
-		if (limit_numframes && numframes >= limit_numframes) { break; }
+			write_frame(cm2);
+		}
 	}
-
-	write_frame(cm2);
 
 	destroy_image(image);
 	destroy_image_gpu(image_gpu);
