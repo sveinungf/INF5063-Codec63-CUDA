@@ -353,10 +353,11 @@ static void print_help()
   exit(EXIT_FAILURE);
 }
 
-static void copy_recons(struct c63_common *from, struct c63_common *to) {
-	cudaMemcpyAsync(to->curframe->recons_gpu->Y, from->curframe->recons_gpu->Y, from->ypw * from->yph * sizeof(uint8_t), cudaMemcpyDeviceToDevice, from->cuda_me.streamY);
-	cudaMemcpyAsync(to->curframe->recons_gpu->U, from->curframe->recons_gpu->U, from->upw * from->uph * sizeof(uint8_t), cudaMemcpyDeviceToDevice, from->cuda_me.streamU);
-	cudaMemcpyAsync(to->curframe->recons_gpu->V, from->curframe->recons_gpu->V, from->vpw * from->vph * sizeof(uint8_t), cudaMemcpyDeviceToDevice, from->cuda_me.streamV);
+static void swap_recons(struct c63_common* cm, struct c63_common* cm2)
+{
+	yuv_t* temp = cm->curframe->recons_gpu;
+	cm->curframe->recons_gpu = cm2->curframe->recons_gpu;
+	cm2->curframe->recons_gpu = temp;
 }
 
 int main(int argc, char **argv)
@@ -436,14 +437,11 @@ int main(int argc, char **argv)
 		if (!ok) { break; }
 		copy_image_to_gpu(cm, image, image_gpu);
 
-		bool ok2 = read_yuv(infile, image2);
-		if (!ok2) { break; }
-		copy_image_to_gpu(cm2, image2, image2_gpu);
-
 		printf("Encoding frame %d, ", numframes);
+		++numframes;
 
 		c63_encode_image(cm, image, image_gpu);
-		copy_recons(cm, cm2);
+		swap_recons(cm, cm2);
 		++cm->framenum;
 		++cm->frames_since_keyframe;
 		++cm2->framenum;
@@ -455,12 +453,21 @@ int main(int argc, char **argv)
 			first = false;
 		}
 
+		bool ok2 = read_yuv(infile, image2);
+		if (!ok2) { break; }
+
 		cudaStreamSynchronize(cm->cuda_me.streamY);
 		cudaStreamSynchronize(cm->cuda_me.streamU);
 		cudaStreamSynchronize(cm->cuda_me.streamV);
+		printf("Done!\n");
+
+		copy_image_to_gpu(cm2, image2, image2_gpu);
+
+		printf("Encoding frame %d, ", numframes);
+		++numframes;
 
 		c63_encode_image(cm2, image2, image2_gpu);
-		copy_recons(cm2, cm);
+		swap_recons(cm2, cm);
 		++cm->framenum;
 		++cm->frames_since_keyframe;
 		++cm2->framenum;
@@ -471,10 +478,7 @@ int main(int argc, char **argv)
 		cudaStreamSynchronize(cm2->cuda_me.streamY);
 		cudaStreamSynchronize(cm2->cuda_me.streamU);
 		cudaStreamSynchronize(cm2->cuda_me.streamV);
-
 		printf("Done!\n");
-
-		numframes+=2;
 
 		if (limit_numframes && numframes >= limit_numframes) { break; }
 	}
