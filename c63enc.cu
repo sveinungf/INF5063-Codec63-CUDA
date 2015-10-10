@@ -143,10 +143,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 	cudaMemcpyAsync(cm->curframe->residuals->Vdct, residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t),
 			cudaMemcpyDeviceToHost, cm->cuda_me.streamV);
 
-	cudaStreamSynchronize(cm->cuda_me.streamY);
-	cudaStreamSynchronize(cm->cuda_me.streamU);
-	cudaStreamSynchronize(cm->cuda_me.streamV);
-
 	/* Reconstruct frame for inter-prediction */
 	dequantize_idct<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_me.streamY>>>(residuals->Ydct, predicted->Y,
 			cm->ypw, cm->curframe->recons_gpu->Y, Y_COMPONENT);
@@ -159,11 +155,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_g
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
-
-	write_frame(cm);
-
-	++cm->framenum;
-	++cm->frames_since_keyframe;
 }
 
 static void set_searchrange_boundaries_cuda(c63_common* cm)
@@ -362,6 +353,12 @@ static void print_help()
   exit(EXIT_FAILURE);
 }
 
+static void copy_recons(struct c63_common *from, struct c63_common *to) {
+	cudaMemcpyAsync(to->curframe->recons_gpu->Y, from->curframe->recons_gpu->Y, from->ypw * from->yph * sizeof(uint8_t), cudaMemcpyDeviceToDevice, from->cuda_me.streamY);
+	cudaMemcpyAsync(to->curframe->recons_gpu->U, from->curframe->recons_gpu->U, from->upw * from->uph * sizeof(uint8_t), cudaMemcpyDeviceToDevice, from->cuda_me.streamU);
+	cudaMemcpyAsync(to->curframe->recons_gpu->V, from->curframe->recons_gpu->V, from->vpw * from->vph * sizeof(uint8_t), cudaMemcpyDeviceToDevice, from->cuda_me.streamV);
+}
+
 int main(int argc, char **argv)
 {
 	int c;
@@ -407,6 +404,9 @@ int main(int argc, char **argv)
 	struct c63_common *cm = init_c63_enc(width, height);
 	cm->e_ctx.fp = outfile;
 
+	struct c63_common *cm2 = init_c63_enc(width, height);
+	cm2->e_ctx.fp = outfile;
+
 	input_file = argv[optind];
 
 	if (limit_numframes) { printf("Limited to %d frames.\n", limit_numframes); }
@@ -422,52 +422,75 @@ int main(int argc, char **argv)
 	/* Encode input frames */
 	int numframes = 0;
 
-	# ifdef SHOW_CYCLES
-	uint64_t kCycleCountTotal = 0;
-	# endif
-
 	yuv_t *image = create_image(cm);
 	yuv_t *image_gpu = create_image_gpu(cm);
+
+	yuv_t *image2 = create_image(cm2);
+	yuv_t *image2_gpu = create_image_gpu(cm2);
+
+	bool first = true;
 
 	while (1)
 	{
 		bool ok = read_yuv(infile, image);
-
 		if (!ok) { break; }
-
 		copy_image_to_gpu(cm, image, image_gpu);
+
+		bool ok2 = read_yuv(infile, image2);
+		if (!ok2) { break; }
+		copy_image_to_gpu(cm2, image2, image2_gpu);
 
 		printf("Encoding frame %d, ", numframes);
 
-	# ifdef SHOW_CYCLES
-		uint64_t cycleCountBefore = rdtsc();
 		c63_encode_image(cm, image, image_gpu);
-		uint64_t cycleCountAfter = rdtsc();
+		copy_recons(cm, cm2);
+		++cm->framenum;
+		++cm->frames_since_keyframe;
+		++cm2->framenum;
+		++cm2->frames_since_keyframe;
 
-		uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
-		kCycleCountTotal += kCycleCount;
-		printf("%" PRIu64 "k cycles, ", kCycleCount);
-	# else
-		c63_encode_image(cm, image, image_gpu);
-	# endif
+		if (!first) {
+			write_frame(cm2);
+		} else {
+			first = false;
+		}
+
+		cudaStreamSynchronize(cm->cuda_me.streamY);
+		cudaStreamSynchronize(cm->cuda_me.streamU);
+		cudaStreamSynchronize(cm->cuda_me.streamV);
+
+		c63_encode_image(cm2, image2, image2_gpu);
+		copy_recons(cm2, cm);
+		++cm->framenum;
+		++cm->frames_since_keyframe;
+		++cm2->framenum;
+		++cm2->frames_since_keyframe;
+
+		write_frame(cm);
+
+		cudaStreamSynchronize(cm2->cuda_me.streamY);
+		cudaStreamSynchronize(cm2->cuda_me.streamU);
+		cudaStreamSynchronize(cm2->cuda_me.streamV);
 
 		printf("Done!\n");
 
-		++numframes;
+		numframes+=2;
 
 		if (limit_numframes && numframes >= limit_numframes) { break; }
 	}
 
-# ifdef SHOW_CYCLES
-	printf("-----------\n");
-	printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
-# endif
+	write_frame(cm2);
 
 	destroy_image(image);
 	destroy_image_gpu(image_gpu);
 	cleanup_cuda_data(cm);
-
 	free_c63_enc(cm);
+
+	destroy_image(image2);
+	destroy_image_gpu(image2_gpu);
+	cleanup_cuda_data(cm2);
+	free_c63_enc(cm2);
+
 	fclose(outfile);
 	fclose(infile);
 
