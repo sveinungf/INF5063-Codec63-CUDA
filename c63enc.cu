@@ -84,12 +84,11 @@ static void zero_out_prediction(struct c63_common* cm)
 	cudaMemset(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
 }
 
-static void c63_encode_image(struct c63_common *cm, yuv_t *image, yuv_t* image_gpu)
+static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 {
 	// Advance to next frame by swapping current and reference frame
 	std::swap(cm->curframe, cm->refframe);
 
-	cm->curframe->orig = image;
 	cm->curframe->orig_gpu = image_gpu;
 
 	/* Check if keyframe */
@@ -417,8 +416,6 @@ int main(int argc, char **argv)
 
 	yuv_t *image = create_image(cm);
 	yuv_t *image_gpu = create_image_gpu(cm);
-
-	yuv_t *image2 = create_image(cm2);
 	yuv_t *image2_gpu = create_image_gpu(cm2);
 
 	bool odd_number_of_frames = true;
@@ -430,7 +427,7 @@ int main(int argc, char **argv)
 		printf("Encoding frame %d, ", numframes);
 		++numframes;
 
-		c63_encode_image(cm, image, image_gpu);
+		c63_encode_image(cm, image_gpu);
 		++cm->framenum;
 		++cm->frames_since_keyframe;
 		++cm2->framenum;
@@ -438,7 +435,7 @@ int main(int argc, char **argv)
 
 		while (!limit_numframes || numframes < limit_numframes)
 		{
-			ok = read_yuv(infile, image2);		// read image 2 from disk
+			ok = read_yuv(infile, image);		// read image 2 from disk
 			if (!ok)
 			{
 				break;
@@ -451,12 +448,12 @@ int main(int argc, char **argv)
 			cudaStreamSynchronize(cm->cuda_me.streamV);	// image 1 done encoding
 			printf("Done!\n");
 
-			copy_image_to_gpu(cm2, image2, image2_gpu);	// copy image 2 to gpu
+			copy_image_to_gpu(cm2, image, image2_gpu);	// copy image 2 to gpu
 
 			printf("Encoding frame %d, ", numframes);
 			++numframes;
 
-			c63_encode_image(cm2, image2, image2_gpu);	// start encoding image 2
+			c63_encode_image(cm2, image2_gpu);	// start encoding image 2
 			++cm->framenum;
 			++cm->frames_since_keyframe;
 			++cm2->framenum;
@@ -489,7 +486,7 @@ int main(int argc, char **argv)
 			printf("Encoding frame %d, ", numframes);
 			++numframes;
 
-			c63_encode_image(cm, image, image_gpu);		// start encoding image 3
+			c63_encode_image(cm, image_gpu);		// start encoding image 3
 			++cm->framenum;
 			++cm->frames_since_keyframe;
 			++cm2->framenum;
@@ -520,11 +517,11 @@ int main(int argc, char **argv)
 
 	destroy_image(image);
 	destroy_image_gpu(image_gpu);
+	destroy_image_gpu(image2_gpu);
+
 	cleanup_cuda_data(cm);
 	free_c63_enc(cm);
 
-	destroy_image(image2);
-	destroy_image_gpu(image2_gpu);
 	cleanup_cuda_data(cm2);
 	free_c63_enc(cm2);
 
