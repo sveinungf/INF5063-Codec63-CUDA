@@ -130,14 +130,14 @@ void destroy_frame(struct frame *f)
 {
 	deinit_frame_gpu(f);
 
-	cudaFree(f->residuals->Ydct);
-	cudaFree(f->residuals->Udct);
-	cudaFree(f->residuals->Vdct);
+	cudaFreeHost(f->residuals->Ydct);
+	cudaFreeHost(f->residuals->Udct);
+	cudaFreeHost(f->residuals->Vdct);
 	free(f->residuals);
 
-	cudaFree(f->mbs[Y_COMPONENT]);
-	cudaFree(f->mbs[U_COMPONENT]);
-	cudaFree(f->mbs[V_COMPONENT]);
+	cudaFreeHost(f->mbs[Y_COMPONENT]);
+	cudaFreeHost(f->mbs[U_COMPONENT]);
+	cudaFreeHost(f->mbs[V_COMPONENT]);
 
 	free(f);
 }
@@ -157,9 +157,9 @@ yuv_t* create_image(struct c63_common *cm)
 
 void destroy_image(yuv_t *image)
 {
-	cudaFree(image->Y);
-	cudaFree(image->U);
-	cudaFree(image->V);
+	cudaFreeHost(image->Y);
+	cudaFreeHost(image->U);
+	cudaFreeHost(image->V);
 	free(image);
 }
 
