@@ -99,6 +99,10 @@ struct cuda_data
 	cudaStream_t streamU;
 	cudaStream_t streamV;
 
+	unsigned int* sad_index_resultsY;
+	unsigned int* sad_index_resultsU;
+	unsigned int* sad_index_resultsV;
+
 	int* leftsY_gpu;
 	int* leftsUV_gpu;
 	int* rightsY_gpu;

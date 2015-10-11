@@ -251,6 +251,10 @@ static void init_cuda_data(c63_common* cm)
 	cudaStreamCreate(&cuda_me->streamU);
 	cudaStreamCreate(&cuda_me->streamV);
 
+	cudaMalloc((void**) &cuda_me->sad_index_resultsY, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int));
+	cudaMalloc((void**) &cuda_me->sad_index_resultsU, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int));
+	cudaMalloc((void**) &cuda_me->sad_index_resultsV, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int));
+
 	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_colsY * sizeof(int));
@@ -268,6 +272,10 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaStreamDestroy(cm->cuda_data.streamY);
 	cudaStreamDestroy(cm->cuda_data.streamU);
 	cudaStreamDestroy(cm->cuda_data.streamV);
+
+	cudaFree(cm->cuda_data.sad_index_resultsY);
+	cudaFree(cm->cuda_data.sad_index_resultsU);
+	cudaFree(cm->cuda_data.sad_index_resultsV);
 
 	cudaFree(cm->cuda_data.leftsY_gpu);
 	cudaFree(cm->cuda_data.leftsUV_gpu);

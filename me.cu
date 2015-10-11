@@ -65,26 +65,9 @@ static void min_reduce(int i, int* values)
 	}
 }
 
-template<int block_size>
-__device__
-static void first_min_occurrence(int i, int* values, int value, int* result)
-{
-	min_reduce<block_size>(i, values);
-
-	if (i == 0) {
-		*result = INT_MAX;
-	}
-
-	__syncthreads();
-
-	if (value == values[0]) {
-		atomicMin(result, i);
-	}
-}
-
 template<int range>
 __global__
-static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w)
+static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
 {
 	const int i = threadIdx.x;
 	const int j = threadIdx.y;
@@ -153,20 +136,37 @@ static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref
 
 	__syncthreads();
 
-	__shared__ int index_result;
-	first_min_occurrence<max_mb_count>(ref_mb_id, block_sads, block_sad, &index_result);
+	min_reduce<max_mb_count>(ref_mb_id, block_sads);
 
 	__syncthreads();
 
-	if (ref_mb_id == 0)
-	{
-		/* Here, there should be a threshold on SAD that checks if the motion vector
-		     is cheaper than intraprediction. We always assume MV to be beneficial */
-		struct macroblock* mb = &mbs[orig_mb_id];
-		mb->use_mv = 1;
-		mb->mv_x = left + (index_result % max_range_width) - mx;
-		mb->mv_y = top + (index_result / max_range_width) - my;
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
 	}
+}
+
+template<int range>
+__global__
+static void set_motion_vectors(struct macroblock* mbs, int* lefts, int* tops, unsigned int* index_results)
+{
+	const int mb_x = blockIdx.x;
+	const int mb_y = threadIdx.x;
+	const int orig_mb_id = mb_y*gridDim.x + mb_x;
+
+	const int left = lefts[mb_x];
+	const int top = tops[mb_y];
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	int index_result = index_results[orig_mb_id];
+
+	/* Here, there should be a threshold on SAD that checks if the motion vector
+		 is cheaper than intraprediction. We always assume MV to be beneficial */
+	struct macroblock* mb = &mbs[orig_mb_id];
+	mb->use_mv = 1;
+	mb->mv_x = left + (index_result % (range*2)) - mx;
+	mb->mv_y = top + (index_result / (range*2)) - my;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
@@ -182,16 +182,24 @@ void c63_motion_estimate(struct c63_common *cm)
 	/* Luma */
 	dim3 numBlocksY(cm->mb_colsY, cm->mb_rowsY);
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
-	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY);
+
+	cudaMemsetAsync(cm->cuda_data.sad_index_resultsY, 255, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int), cm->cuda_data.streamY);
+	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
+	set_motion_vectors<ME_RANGE_Y><<<cm->mb_colsY, cm->mb_rowsY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], cm->cuda_data.leftsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.sad_index_resultsY);
 	cudaMemcpyAsync(cm->curframe->mbs[Y_COMPONENT], mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamY);
 
 	/* Chroma */
 	dim3 numBlocksUV(cm->mb_colsUV, cm->mb_rowsUV);
 	dim3 threadsPerBlockUV(ME_RANGE_UV*2, ME_RANGE_UV*2);
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], orig->U, ref->U, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wU);
+
+	cudaMemsetAsync(cm->cuda_data.sad_index_resultsU, 255, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int), cm->cuda_data.streamU);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], orig->U, ref->U, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wU, cm->cuda_data.sad_index_resultsU);
+	set_motion_vectors<ME_RANGE_UV><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], cm->cuda_data.leftsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.sad_index_resultsU);
 	cudaMemcpyAsync(cm->curframe->mbs[U_COMPONENT], mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamU);
 
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], orig->V, ref->V, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wV);
+	cudaMemsetAsync(cm->cuda_data.sad_index_resultsV, 255, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int), cm->cuda_data.streamV);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], orig->V, ref->V, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wV, cm->cuda_data.sad_index_resultsV);
+	set_motion_vectors<ME_RANGE_UV><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], cm->cuda_data.leftsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.sad_index_resultsV);
 	cudaMemcpyAsync(cm->curframe->mbs[V_COMPONENT], mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamV);
 }
 
