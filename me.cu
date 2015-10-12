@@ -175,9 +175,9 @@ static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* r
 	const int range_width = right - left;
 	const int range_height = bottom - top;
 
-	const int size = 39*40+4;
-	__shared__ uint8_t shared_ref_sr8b[4 * size];
-	uint8_t* shared_ref_sr8 = shared_ref_sr8b + 4;
+	const int testtestwidth = 40*4 + 6*4;
+	__shared__ uint8_t testtest[39*testtestwidth];
+	uint8_t* start = testtest + 3*4;
 
 	if (ref_mb_id < 20*40) {
 		int index = ref_mb_id;
@@ -185,20 +185,20 @@ static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* r
 		int shared_col = index % 40;
 
 		uint8_t val = ref_search_range[shared_row*w + shared_col];
-		shared_ref_sr8[index + size*0] = val;
-		shared_ref_sr8[index + size*1 - 1] = val;
-		shared_ref_sr8[index + size*2 - 2] = val;
-		shared_ref_sr8[index + size*3 - 3] = val;
+		start[shared_row*testtestwidth + (shared_col*4)] = val;
+		start[shared_row*testtestwidth + (shared_col*4)-3] = val;
+		start[shared_row*testtestwidth + (shared_col*4)-6] = val;
+		start[shared_row*testtestwidth + (shared_col*4)-9] = val;
 
 		index = ref_mb_id + 19*40;
-		shared_row = index/40;
-		shared_col = index%40;
+		shared_row = index / 40;
+		shared_col = index % 40;
 
 		val = ref_search_range[shared_row*w + shared_col];
-		shared_ref_sr8[index + size*0] = val;
-		shared_ref_sr8[index + size*1 - 1] = val;
-		shared_ref_sr8[index + size*2 - 2] = val;
-		shared_ref_sr8[index + size*3 - 3] = val;
+		start[shared_row*testtestwidth + (shared_col*4)] = val;
+		start[shared_row*testtestwidth + (shared_col*4)-3] = val;
+		start[shared_row*testtestwidth + (shared_col*4)-6] = val;
+		start[shared_row*testtestwidth + (shared_col*4)-9] = val;
 	} else if (ref_mb_id < 20*40 + 64) {
 		int mymy = ref_mb_id - 20 * 40;
 		shared_orig_block[mymy] = orig_block[(mymy/8)*w + (mymy%8)];
@@ -206,22 +206,19 @@ static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* r
 
 	__syncthreads();
 
-	const int offset = i % 4;
-
 	if (j < range_height && i < range_width)
 	{
 		block_sad = 0;
-		int array_offset = offset*size;
 
-		uint32_t* warmup = (uint32_t*) (shared_ref_sr8 + array_offset + j*40 + i - offset);
+		for (int y = 0; y < 8; ++y) {
+			uint32_t* a1 = (uint32_t*) (start + (j+y)*testtestwidth) + i;
+			uint32_t* a2 = a1 + 4;
 
-		for (int y = 0; y < 8; ++y)
-		{
-			uint32_t* a = warmup + y*10; // (40 / 4)
-			uint32_t* b = (uint32_t*) (shared_orig_block + y*8);
+			uint32_t* b1 = (uint32_t*) (shared_orig_block + y*8);
+			uint32_t* b2 = b1 + 1;
 
-			block_sad += __vsadu4(*a, *b);
-			block_sad += __vsadu4(*(a+1), *(b+1));
+			block_sad += __vsadu4(*a1, *b1);
+			block_sad += __vsadu4(*a2, *b2);
 		}
 	}
 
