@@ -147,6 +147,101 @@ static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref
 
 template<int range>
 __global__
+static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int ref_mb_id = j*blockDim.x + i;
+
+	const int mb_x = blockIdx.x;
+	const int mb_y = blockIdx.y;
+	const int orig_mb_id = mb_y*gridDim.x + mb_x;
+
+	const int left = lefts[mb_x];
+	const int top = tops[mb_y];
+	const int right = rights[mb_x];
+	const int bottom = bottoms[mb_y];
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	uint8_t* orig_block = orig + my * w + mx;
+	uint8_t* ref_search_range = ref + top*w + left;
+
+	__shared__ uint8_t shared_orig_block[64];
+
+	int block_sad = INT_MAX;
+
+	const int range_width = right - left;
+	const int range_height = bottom - top;
+
+	__shared__ uint8_t shared_ref_sr8[4 * 39*40];
+
+	if (ref_mb_id < 20*40) {
+		int index = ref_mb_id;
+		int shared_row = index / 40;
+		int shared_col = index % 40;
+
+		shared_ref_sr8[index + 39*40*0] = ref_search_range[shared_row*w + shared_col];
+		shared_ref_sr8[index + 39*40*1] = ref_search_range[shared_row*w + shared_col + 1];
+		shared_ref_sr8[index + 39*40*2] = ref_search_range[shared_row*w + shared_col + 2];
+		shared_ref_sr8[index + 39*40*3] = ref_search_range[shared_row*w + shared_col + 3];
+
+		index = ref_mb_id + 19*40;
+		shared_row = index/40;
+		shared_col = index%40;
+
+		shared_ref_sr8[index + 39*40*0] = ref_search_range[shared_row*w + shared_col];
+		shared_ref_sr8[index + 39*40*1] = ref_search_range[shared_row*w + shared_col + 1];
+		shared_ref_sr8[index + 39*40*2] = ref_search_range[shared_row*w + shared_col + 2];
+		shared_ref_sr8[index + 39*40*3] = ref_search_range[shared_row*w + shared_col + 3];
+	} else if (ref_mb_id < 20*40 + 64) {
+		int mymy = ref_mb_id - 20 * 40;
+		shared_orig_block[mymy] = orig_block[(mymy/8)*w + (mymy%8)];
+	}
+
+	__syncthreads();
+
+	const int offset = i % 4;
+
+	if (j < range_height && i < range_width)
+	{
+		block_sad = 0;
+		int array_offset = offset*39*40;
+
+		uint32_t* warmup = (uint32_t*) (shared_ref_sr8 + array_offset + j*40 + i - offset);
+
+		for (int y = 0; y < 8; ++y)
+		{
+			uint32_t* a = warmup + y*10; // (40 / 4)
+			uint32_t* b = (uint32_t*) (shared_orig_block + y*8);
+
+			block_sad += __vsadu4(*a, *b);
+			block_sad += __vsadu4(*(a+1), *(b+1));
+		}
+	}
+
+	const int max_range_width = range * 2;
+	const int max_range_height = range * 2;
+	const int max_mb_count = max_range_width * max_range_height;
+
+	__shared__ int block_sads[max_mb_count];
+
+	block_sads[ref_mb_id] = block_sad;
+
+	__syncthreads();
+
+	min_reduce<max_mb_count>(ref_mb_id, block_sads);
+
+	__syncthreads();
+
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
+	}
+}
+
+template<int range>
+__global__
 static void set_motion_vectors(struct macroblock* mbs, int* lefts, int* tops, unsigned int* index_results)
 {
 	const int mb_x = blockIdx.x;
@@ -184,7 +279,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsY, 255, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int), cm->cuda_data.streamY);
-	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu_Y<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
 	set_motion_vectors<ME_RANGE_Y><<<cm->mb_colsY, cm->mb_rowsY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], cm->cuda_data.leftsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.sad_index_resultsY);
 	cudaMemcpyAsync(cm->curframe->mbs[Y_COMPONENT], mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamY);
 
