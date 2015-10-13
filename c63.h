@@ -93,6 +93,25 @@ struct frame
   int keyframe;
 };
 
+struct corner_data
+{
+	int mb_x;
+	int mb_y;
+
+	int left;
+	int top;
+	int right;
+	int bottom;
+};
+
+struct boundaries
+{
+	int* lefts;
+	int* rights;
+	int* tops;
+	int* bottoms;
+};
+
 struct cuda_data
 {
 	cudaStream_t streamY;
@@ -111,6 +130,13 @@ struct cuda_data
 	int* topsUV_gpu;
 	int* bottomsY_gpu;
 	int* bottomsUV_gpu;
+
+	struct boundaries boundariesY;
+
+	struct corner_data* corner_datasY_gpu;
+	struct corner_data* semicornerH_datasY_gpu;
+	struct corner_data* semicornerV_datasY_gpu;
+	struct corner_data* innercorner_datasY_gpu;
 };
 
 struct c63_common

@@ -233,6 +233,170 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	cudaMemcpy(cm->cuda_data.bottomsY_gpu, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(cm->cuda_data.bottomsUV_gpu, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
 
+	cm->cuda_data.boundariesY.lefts = cm->cuda_data.leftsY_gpu;
+	cm->cuda_data.boundariesY.rights = cm->cuda_data.rightsY_gpu;
+	cm->cuda_data.boundariesY.tops = cm->cuda_data.topsY_gpu;
+	cm->cuda_data.boundariesY.bottoms = cm->cuda_data.bottomsY_gpu;
+
+	struct corner_data* corner_datasY = new struct corner_data[4];
+
+	// Top left
+	corner_datasY[0].mb_x = 0;
+	corner_datasY[0].mb_y = 0;
+	corner_datasY[0].left = 0;
+	corner_datasY[0].top = 0;
+	corner_datasY[0].right = ME_RANGE_Y;
+	corner_datasY[0].bottom = ME_RANGE_Y;
+
+	// Top right
+	corner_datasY[1].mb_x = cm->mb_colsY - 1;
+	corner_datasY[1].mb_y = 0;
+	corner_datasY[1].left = cm->ypw - 8 - ME_RANGE_Y;
+	corner_datasY[1].top = 0;
+	corner_datasY[1].right = cm->ypw - 8;
+	corner_datasY[1].bottom = ME_RANGE_Y;
+
+	// Bottom left
+	corner_datasY[2].mb_x = 0;
+	corner_datasY[2].mb_y = cm->mb_rowsY - 1;
+	corner_datasY[2].left = 0;
+	corner_datasY[2].top = cm->yph - 8 - ME_RANGE_Y;
+	corner_datasY[2].right = ME_RANGE_Y;
+	corner_datasY[2].bottom = cm->yph - 8;
+
+	// Bottom right
+	corner_datasY[3].mb_x = cm->mb_colsY - 1;
+	corner_datasY[3].mb_y = cm->mb_rowsY - 1;
+	corner_datasY[3].left = cm->ypw - 8 - ME_RANGE_Y;
+	corner_datasY[3].top = cm->yph - 8 - ME_RANGE_Y;
+	corner_datasY[3].right = cm->ypw - 8;
+	corner_datasY[3].bottom = cm->yph - 8;
+
+	cudaMemcpy(cm->cuda_data.corner_datasY_gpu, corner_datasY, 4 * sizeof(struct corner_data), cudaMemcpyHostToDevice);
+
+	delete[] corner_datasY;
+
+	struct corner_data* semicornerH_datasY = new struct corner_data[8];
+
+	// Top left2
+	semicornerH_datasY[0].mb_x = 1;
+	semicornerH_datasY[0].mb_y = 0;
+	semicornerH_datasY[0].left = 0;
+	semicornerH_datasY[0].top = 0;
+	semicornerH_datasY[0].right = ME_RANGE_Y + 8;
+	semicornerH_datasY[0].bottom = ME_RANGE_Y;
+
+	// Top right2
+	semicornerH_datasY[1].mb_x = cm->mb_colsY - 2;
+	semicornerH_datasY[1].mb_y = 0;
+	semicornerH_datasY[1].left = cm->ypw - 16 - ME_RANGE_Y;
+	semicornerH_datasY[1].top = 0;
+	semicornerH_datasY[1].right = cm->ypw - 8;
+	semicornerH_datasY[1].bottom = ME_RANGE_Y;
+
+	// Bottom left2
+	semicornerH_datasY[2].mb_x = 1;
+	semicornerH_datasY[2].mb_y = cm->mb_rowsY - 1;
+	semicornerH_datasY[2].left = 0;
+	semicornerH_datasY[2].top = cm->yph - 8 - ME_RANGE_Y;
+	semicornerH_datasY[2].right = ME_RANGE_Y + 8;
+	semicornerH_datasY[2].bottom = cm->yph - 8;
+
+	// Bottom right2
+	semicornerH_datasY[3].mb_x = cm->mb_colsY - 2;
+	semicornerH_datasY[3].mb_y = cm->mb_rowsY - 1;
+	semicornerH_datasY[3].left = cm->ypw - 16 - ME_RANGE_Y;
+	semicornerH_datasY[3].top = cm->yph - 8 - ME_RANGE_Y;
+	semicornerH_datasY[3].right = cm->ypw - 8;
+	semicornerH_datasY[3].bottom = cm->yph - 8;
+
+	cudaMemcpy(cm->cuda_data.semicornerH_datasY_gpu, semicornerH_datasY, 8 * sizeof(struct corner_data), cudaMemcpyHostToDevice);
+
+	delete[] semicornerH_datasY;
+
+	struct corner_data* semicornerV_datasY = new struct corner_data[8];
+
+	// Top2 left
+	semicornerV_datasY[0].mb_x = 0;
+	semicornerV_datasY[0].mb_y = 1;
+	semicornerV_datasY[0].left = 0;
+	semicornerV_datasY[0].top = 0;
+	semicornerV_datasY[0].right = ME_RANGE_Y;
+	semicornerV_datasY[0].bottom = ME_RANGE_Y + 8;
+
+	// Top2 right
+	semicornerV_datasY[1].mb_x = cm->mb_colsY - 1;
+	semicornerV_datasY[1].mb_y = 1;
+	semicornerV_datasY[1].left = cm->ypw - 8 - ME_RANGE_Y;
+	semicornerV_datasY[1].top = 0;
+	semicornerV_datasY[1].right = cm->ypw - 8;
+	semicornerV_datasY[1].bottom = ME_RANGE_Y + 8;
+
+	// Bottom2 left
+	semicornerV_datasY[2].mb_x = 0;
+	semicornerV_datasY[2].mb_y = cm->mb_rowsY - 2;
+	semicornerV_datasY[2].left = 0;
+	semicornerV_datasY[2].top = cm->yph - 16 - ME_RANGE_Y;
+	semicornerV_datasY[2].right = ME_RANGE_Y;
+	semicornerV_datasY[2].bottom = cm->yph - 8;
+
+	// Bottom2 right
+	semicornerV_datasY[3].mb_x = cm->mb_colsY - 1;
+	semicornerV_datasY[3].mb_y = cm->mb_rowsY - 2;
+	semicornerV_datasY[3].left = cm->ypw - 8 - ME_RANGE_Y;
+	semicornerV_datasY[3].top = cm->yph - 16 - ME_RANGE_Y;
+	semicornerV_datasY[3].right = cm->ypw - 8;
+	semicornerV_datasY[3].bottom = cm->yph - 8;
+
+	cudaMemcpy(cm->cuda_data.semicornerV_datasY_gpu, semicornerV_datasY, 8 * sizeof(struct corner_data), cudaMemcpyHostToDevice);
+
+	delete[] semicornerV_datasY;
+
+	struct corner_data* innercorner_datasY = new struct corner_data[4];
+
+	// Top left
+	innercorner_datasY[0].mb_x = 1;
+	innercorner_datasY[0].mb_y = 1;
+	innercorner_datasY[0].left = 0;
+	innercorner_datasY[0].top = 0;
+	innercorner_datasY[0].right = ME_RANGE_Y + 8;
+	innercorner_datasY[0].bottom = ME_RANGE_Y + 8;
+
+	// Top right
+	innercorner_datasY[1].mb_x = cm->mb_colsY - 2;
+	innercorner_datasY[1].mb_y = 1;
+	innercorner_datasY[1].left = cm->ypw - 16 - ME_RANGE_Y;
+	innercorner_datasY[1].top = 0;
+	innercorner_datasY[1].right = cm->ypw - 8;
+	innercorner_datasY[1].bottom = ME_RANGE_Y + 8;
+
+	int mb_x;
+	int mb_y;
+
+	// Bottom left
+	mb_x = 1;
+	mb_y = cm->mb_rowsY - 2;
+	innercorner_datasY[2].mb_x = mb_x;
+	innercorner_datasY[2].mb_y = mb_y;
+	innercorner_datasY[2].left = leftsY[mb_x];
+	innercorner_datasY[2].top = topsY[mb_y];
+	innercorner_datasY[2].right = rightsY[mb_x];
+	innercorner_datasY[2].bottom = bottomsY[mb_y];
+
+	// Bottom right
+	mb_x = cm->mb_colsY - 2;
+	mb_y = cm->mb_rowsY - 2;
+	innercorner_datasY[3].mb_x = mb_x;
+	innercorner_datasY[3].mb_y = mb_y;
+	innercorner_datasY[3].left = leftsY[mb_x];
+	innercorner_datasY[3].top = topsY[mb_y];
+	innercorner_datasY[3].right = rightsY[mb_x];
+	innercorner_datasY[3].bottom = bottomsY[mb_y];
+
+	cudaMemcpy(cm->cuda_data.innercorner_datasY_gpu, innercorner_datasY, 4 * sizeof(struct corner_data), cudaMemcpyHostToDevice);
+
+	delete[] innercorner_datasY;
+
 	delete[] leftsY;
 	delete[] leftsUV;
 	delete[] rightsY;
@@ -264,6 +428,11 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rowsY * sizeof(int));
 	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rowsUV * sizeof(int));
 
+	cudaMalloc((void**) &(cuda_me->corner_datasY_gpu), 4 * sizeof(struct corner_data));
+	cudaMalloc((void**) &(cuda_me->innercorner_datasY_gpu), 4 * sizeof(struct corner_data));
+	cudaMalloc((void**) &(cuda_me->semicornerH_datasY_gpu), 8 * sizeof(struct corner_data));
+	cudaMalloc((void**) &(cuda_me->semicornerV_datasY_gpu), 8 * sizeof(struct corner_data));
+
 	set_searchrange_boundaries_cuda(cm);
 }
 
@@ -285,6 +454,11 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_data.topsUV_gpu);
 	cudaFree(cm->cuda_data.bottomsY_gpu);
 	cudaFree(cm->cuda_data.bottomsUV_gpu);
+
+	cudaFree(cm->cuda_data.corner_datasY_gpu);
+	cudaFree(cm->cuda_data.innercorner_datasY_gpu);
+	cudaFree(cm->cuda_data.semicornerH_datasY_gpu);
+	cudaFree(cm->cuda_data.semicornerV_datasY_gpu);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
