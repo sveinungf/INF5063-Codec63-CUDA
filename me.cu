@@ -65,6 +65,47 @@ static void min_reduce(int i, int* values)
 	}
 }
 
+__device__
+static int calculate_block_sad(uint8_t* orig_block, uint8_t* ref_search_range, int w)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+
+	__shared__ uint8_t shared_orig_block[64];
+
+	if (i < 8 && j < 8)
+	{
+		shared_orig_block[j*8 + i] = orig_block[j*w + i];
+	}
+
+	__syncthreads();
+
+	int block_sad = INT_MAX;
+
+	const int shifts = (i % 4) * 8;
+
+	// (i/4)*4 rounds i down to the nearest integer divisible by 4
+	uint8_t* ref_block_top_row_aligned = ref_search_range + j*w + (i/4)*4;
+
+	int result = 0;
+
+	for (int y = 0; y < 8; ++y)
+	{
+		uint32_t* ref_block_row_aligned = (uint32_t*) (ref_block_top_row_aligned + y*w);
+		uint32_t ref_row_left = (ref_block_row_aligned[0] >> shifts) | (ref_block_row_aligned[1] << 32-shifts);
+		uint32_t ref_row_right = (ref_block_row_aligned[1] >> shifts) | (ref_block_row_aligned[2] << 32-shifts);
+
+		uint8_t* orig_block_row = shared_orig_block + y*8;
+		uint32_t orig_row_left = *((uint32_t*) orig_block_row);
+		uint32_t orig_row_right = *((uint32_t*) orig_block_row + 1);
+
+		result += __vsadu4(ref_row_left, orig_row_left);
+		result += __vsadu4(ref_row_right, orig_row_right);
+	}
+
+	return result;
+}
+
 template<int range>
 __global__
 static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
@@ -147,6 +188,218 @@ static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref
 
 template<int range>
 __global__
+static void me_block_8x8_gpu_Y_topleft(uint8_t* orig, uint8_t* ref, int w, unsigned int* index_results)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int ref_mb_id = j*blockDim.x + i;
+
+	const int mb_x = 0;
+	const int mb_y = 0;
+	const int orig_mb_id = 0;
+
+	const int left = 0;
+	const int top = 0;
+	const int right = 16;
+	const int bottom = 16;
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	uint8_t* orig_block = orig;
+	uint8_t* ref_search_range = ref;
+
+	__shared__ int block_sads[16*16];
+
+	int block_sad = calculate_block_sad(orig_block, ref_search_range, w);
+	block_sads[ref_mb_id] = block_sad;
+
+	__syncthreads();
+
+	min_reduce<16*16>(ref_mb_id, block_sads);
+
+	__syncthreads();
+
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
+	}
+}
+
+template<int range>
+__global__
+static void me_block_8x8_gpu_Y_topleft2(uint8_t* orig, uint8_t* ref, int w, unsigned int* index_results)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int ref_mb_id = j*blockDim.x + i;
+
+	const int mb_x = 1;
+	const int mb_y = 0;
+	const int orig_mb_id = 1;
+
+	const int left = 0;
+	const int top = 0;
+	const int right = 24;
+	const int bottom = 16;
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	uint8_t* orig_block = orig + my * w + mx;
+	uint8_t* ref_search_range = ref + top*w + left;
+
+	__shared__ int block_sads[16*24];
+
+	int block_sad = calculate_block_sad(orig_block, ref_search_range, w);
+	block_sads[ref_mb_id] = block_sad;
+
+	__syncthreads();
+
+	min_reduce<16*16>(ref_mb_id, block_sads);
+	min_reduce<16*8>(ref_mb_id, block_sads+256);
+
+	__syncthreads();
+
+	if (ref_mb_id == 0) {
+		block_sads[0] = min(block_sads[0], block_sads[256]);
+	}
+
+	__syncthreads();
+
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
+	}
+}
+
+template<int range>
+__global__
+static void me_block_8x8_gpu_Y_topright(uint8_t* orig, uint8_t* ref, int cols, int w, unsigned int* index_results)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int ref_mb_id = j*blockDim.x + i;
+
+	const int mb_x = cols-1;
+	const int mb_y = 0;
+	const int orig_mb_id = cols-1;
+
+	const int left = w - 8 - 16;
+	const int top = 0;
+	const int right = w - 8;
+	const int bottom = 16;
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	uint8_t* orig_block = orig + my * w + mx;
+	uint8_t* ref_search_range = ref + top*w + left;
+
+	__shared__ int block_sads[16*16];
+
+	int block_sad = calculate_block_sad(orig_block, ref_search_range, w);
+
+	block_sads[ref_mb_id] = block_sad;
+
+	__syncthreads();
+
+	min_reduce<16*16>(ref_mb_id, block_sads);
+
+	__syncthreads();
+
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
+	}
+}
+
+template<int range>
+__global__
+static void me_block_8x8_gpu_Y_topright2(uint8_t* orig, uint8_t* ref, int cols, int w, unsigned int* index_results)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int ref_mb_id = j*blockDim.x + i;
+
+	const int mb_x = cols-2;
+	const int mb_y = 0;
+	const int orig_mb_id = cols-2;
+
+	const int left = w - 8 - 24;
+	const int top = 0;
+	const int right = w - 8;
+	const int bottom = 16;
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	uint8_t* orig_block = orig + my * w + mx;
+	uint8_t* ref_search_range = ref + top*w + left;
+
+	__shared__ int block_sads[16*24];
+
+	int block_sad = calculate_block_sad(orig_block, ref_search_range, w);
+
+	block_sads[ref_mb_id] = block_sad;
+
+	__syncthreads();
+
+	min_reduce<16*16>(ref_mb_id, block_sads);
+	min_reduce<16*8>(ref_mb_id, block_sads+256);
+
+	__syncthreads();
+
+	if (ref_mb_id == 0) {
+		block_sads[0] = min(block_sads[0], block_sads[256]);
+	}
+
+	__syncthreads();
+
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
+	}
+}
+
+template<int range>
+__global__
+static void me_block_8x8_gpu_Y_top(uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int w, unsigned int* index_results)
+{
+	const int i = threadIdx.x;
+	const int j = threadIdx.y;
+	const int ref_mb_id = j*blockDim.x + i;
+
+	const int mb_x = blockIdx.x + 2;
+	const int mb_y = 0;
+	const int orig_mb_id = mb_x;
+
+	const int left = lefts[mb_x];
+	const int top = 0;
+	const int right = rights[mb_x];
+	const int bottom = 16;
+
+	const int mx = mb_x * 8;
+	const int my = mb_y * 8;
+
+	uint8_t* orig_block = orig + my * w + mx;
+	uint8_t* ref_search_range = ref + top*w + left;
+
+	__shared__ int block_sads[16*32];
+
+	int block_sad = calculate_block_sad(orig_block, ref_search_range, w);
+
+	block_sads[ref_mb_id] = block_sad;
+
+	__syncthreads();
+
+	min_reduce<16*32>(ref_mb_id, block_sads);
+
+	__syncthreads();
+
+	if (block_sad == block_sads[0]) {
+		atomicMin(index_results + orig_mb_id, ref_mb_id);
+	}
+}
+
+template<int range>
+__global__
 static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
 {
 	const int i = threadIdx.x;
@@ -154,8 +407,12 @@ static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* r
 	const int ref_mb_id = j*blockDim.x + i;
 
 	const int mb_x = blockIdx.x;
-	const int mb_y = blockIdx.y;
+	const int mb_y = blockIdx.y+1;
 	const int orig_mb_id = mb_y*gridDim.x + mb_x;
+
+	/*if (mb_y == 0) { // && (mb_x == 0 || mb_x == 1 || mb_x == gridDim.x-2 || mb_x == gridDim.x-1)) {
+		return;
+	}*/
 
 	const int left = lefts[mb_x];
 	const int top = tops[mb_y];
@@ -170,10 +427,10 @@ static void me_block_8x8_gpu_Y(struct macroblock* mbs, uint8_t* orig, uint8_t* r
 
 	__shared__ uint8_t shared_orig_block[64];
 
-	int block_sad = INT_MAX;
-
 	const int range_width = right - left;
 	const int range_height = bottom - top;
+
+	int block_sad = INT_MAX;
 
 	const int testtestwidth = 40*4 + 6*4;
 	__shared__ uint8_t testtest[39*testtestwidth];
@@ -276,11 +533,20 @@ void c63_motion_estimate(struct c63_common *cm)
 	const int wV = cm->padw[V_COMPONENT];
 
 	/* Luma */
-	dim3 numBlocksY(cm->mb_colsY, cm->mb_rowsY);
+	dim3 numBlocksY(cm->mb_colsY, cm->mb_rowsY-1);
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
+
+	dim3 threadsPerBlockY_corner(ME_RANGE_Y, ME_RANGE_Y);
+	dim3 threadsPerBlockY_semicorner(24, 16);
+	dim3 threadsPerBlockY_edge(32, 16);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsY, 255, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int), cm->cuda_data.streamY);
 	me_block_8x8_gpu_Y<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu_Y_topleft<16><<<1, threadsPerBlockY_corner, 0, cm->cuda_data.streamY>>>(orig->Y, ref->Y, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu_Y_topleft2<16><<<1, threadsPerBlockY_semicorner, 0, cm->cuda_data.streamY>>>(orig->Y, ref->Y, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu_Y_top<16><<<cm->mb_colsY-4, threadsPerBlockY_edge, 0, cm->cuda_data.streamY>>>(orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu_Y_topright2<16><<<1, threadsPerBlockY_semicorner, 0, cm->cuda_data.streamY>>>(orig->Y, ref->Y, cm->mb_colsY, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu_Y_topright<16><<<1, threadsPerBlockY_corner, 0, cm->cuda_data.streamY>>>(orig->Y, ref->Y, cm->mb_colsY, wY, cm->cuda_data.sad_index_resultsY);
 	set_motion_vectors<ME_RANGE_Y><<<cm->mb_colsY, cm->mb_rowsY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], cm->cuda_data.leftsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.sad_index_resultsY);
 	cudaMemcpyAsync(cm->curframe->mbs[Y_COMPONENT], mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamY);
 
