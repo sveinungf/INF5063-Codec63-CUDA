@@ -102,7 +102,7 @@ static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref
 	const int range_width = right - left;
 	const int range_height = bottom - top;
 
-	const int shifts = (i % 4) * 8;
+	const unsigned int mask = 0x3210 + 0x1111 * (i%4);
 
 	// (i/4)*4 rounds i down to the nearest integer divisible by 4
 	uint8_t* ref_block_top_row_aligned = ref_search_range + j*w + (i/4)*4;
@@ -111,11 +111,11 @@ static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref
 	{
 		block_sad = 0;
 
-		for (int y = 0; y < 8; ++y)
+		for (unsigned int y = 8; y--; )
 		{
 			uint32_t* ref_block_row_aligned = (uint32_t*) (ref_block_top_row_aligned + y*w);
-			uint32_t ref_row_left = (ref_block_row_aligned[0] >> shifts) | (ref_block_row_aligned[1] << 32-shifts);
-			uint32_t ref_row_right = (ref_block_row_aligned[1] >> shifts) | (ref_block_row_aligned[2] << 32-shifts);
+			uint32_t ref_row_left = __byte_perm(ref_block_row_aligned[0], ref_block_row_aligned[1], mask);
+			uint32_t ref_row_right = __byte_perm(ref_block_row_aligned[1], ref_block_row_aligned[2], mask);
 
 			uint8_t* orig_block_row = shared_orig_block + y*8;
 			uint32_t orig_row_left = *((uint32_t*) orig_block_row);
