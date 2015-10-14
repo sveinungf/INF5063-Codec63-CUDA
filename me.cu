@@ -67,7 +67,7 @@ static void min_reduce(int i, int* values)
 
 template<int range>
 __global__
-static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
+static void me_block_8x8_gpu(uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
 {
 	const int i = threadIdx.x;
 	const int j = threadIdx.y;
@@ -184,7 +184,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	dim3 threadsPerBlockY(ME_RANGE_Y*2, ME_RANGE_Y*2);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsY, 255, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int), cm->cuda_data.streamY);
-	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
+	me_block_8x8_gpu<ME_RANGE_Y><<<numBlocksY, threadsPerBlockY, 0, cm->cuda_data.streamY>>>(orig->Y, ref->Y, cm->cuda_data.leftsY_gpu, cm->cuda_data.rightsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.bottomsY_gpu, wY, cm->cuda_data.sad_index_resultsY);
 	set_motion_vectors<ME_RANGE_Y><<<cm->mb_colsY, cm->mb_rowsY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], cm->cuda_data.leftsY_gpu, cm->cuda_data.topsY_gpu, cm->cuda_data.sad_index_resultsY);
 	cudaMemcpyAsync(cm->curframe->mbs[Y_COMPONENT], mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamY);
 
@@ -193,12 +193,12 @@ void c63_motion_estimate(struct c63_common *cm)
 	dim3 threadsPerBlockUV(ME_RANGE_UV*2, ME_RANGE_UV*2);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsU, 255, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int), cm->cuda_data.streamU);
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], orig->U, ref->U, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wU, cm->cuda_data.sad_index_resultsU);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamU>>>(orig->U, ref->U, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wU, cm->cuda_data.sad_index_resultsU);
 	set_motion_vectors<ME_RANGE_UV><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], cm->cuda_data.leftsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.sad_index_resultsU);
 	cudaMemcpyAsync(cm->curframe->mbs[U_COMPONENT], mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamU);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsV, 255, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int), cm->cuda_data.streamV);
-	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], orig->V, ref->V, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wV, cm->cuda_data.sad_index_resultsV);
+	me_block_8x8_gpu<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamV>>>(orig->V, ref->V, cm->cuda_data.leftsUV_gpu, cm->cuda_data.rightsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.bottomsUV_gpu, wV, cm->cuda_data.sad_index_resultsV);
 	set_motion_vectors<ME_RANGE_UV><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], cm->cuda_data.leftsUV_gpu, cm->cuda_data.topsUV_gpu, cm->cuda_data.sad_index_resultsV);
 	cudaMemcpyAsync(cm->curframe->mbs[V_COMPONENT], mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamV);
 }
