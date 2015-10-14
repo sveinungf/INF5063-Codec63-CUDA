@@ -2,10 +2,10 @@ CC = gcc
 NVCC = nvcc
 
 CCFLAGS = -Wall
-NVCCFLAGS = -std=c++11 -rdc=true -fmad=false
+NVCCFLAGS = -std=c++11 -fmad=false
 LDFLAGS = -lm
 
-DEBUG ?= 0
+DEBUG ?= 1
 
 ifeq ($(DEBUG),1)
 	CCFLAGS += -Og -g -pg -DSHOW_CYCLES
@@ -20,7 +20,7 @@ ALL_NVCCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
 ALL_LDFLAGS = $(addprefix -Xlinker ,$(LDFLAGS))
 
 VIDEO ?= 1
-FRAMES ?= 30
+FRAMES ?= 10
 
 ifeq ($(VIDEO),0)
 	WIDTH = 352
@@ -70,7 +70,7 @@ gprof:
 gprof-file:
 	gprof c63enc gmon.out > temp/gprof-result.txt
 nvprof:
-	nvprof --cpu-profiling on ./c63enc -w $(WIDTH) -h $(HEIGHT) -f $(FRAMES) -o temp/test.c63 $(INPUT_VIDEO)
+	nvprof ./c63enc -w $(WIDTH) -h $(HEIGHT) -f $(FRAMES) -o temp/test.c63 $(INPUT_VIDEO)
 
 psnr:
 	./tools/yuv-tools/ycbcr.py psnr $(INPUT_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(OUTPUT_VIDEO)

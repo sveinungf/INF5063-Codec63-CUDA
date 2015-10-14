@@ -11,13 +11,84 @@
 #include "dsp.h"
 
 
-__global__
-void dequantize_idct(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_data, int quantization)
+__device__
+static void dct_quant_block_8x8(float* in_data, float *out_data, int16_t *global_out, const uint8_t* __restrict__ quant_tbl, int i, int j)
 {
-	int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
+	// First dct_1d - mb = mb2 - and transpose
+	float dct = 0;
+	int k;
+	for (k = 0; k < 8; ++k) {
+		dct += in_data[j*8+k] * dct_lookup_trans[i*8+k];
+	}
+	out_data[i*8+j] = dct;
+	__syncthreads();
 
- 	int i = threadIdx.y;
- 	int j = threadIdx.x;
+	// Second dct_1d - mb = mb2 - and transpose
+	dct = 0;
+	for (k = 0; k < 8; ++k) {
+		dct += out_data[j*8+k] * dct_lookup_trans[i*8+k];
+		//test[i*64+k*8+j] = out_data[i*8+j] * dct_lookup_trans[k*8+j];
+	}
+
+	// Scale
+	if(i == 0) {
+		dct *= ISQRT2;
+	}
+	if(j == 0) {
+		dct *= ISQRT2;
+	}
+	in_data[i*8+j] = dct;
+	__syncthreads();
+
+	// Quantize and set value in out_data
+	dct = in_data[UV_indexes[i*8+j]];
+	global_out[i*8+j] = round((dct/4.0f) / quant_tbl[i*8+j]);
+}
+
+
+__device__
+static void dequant_idct_block_8x8(float *in_data, float *out_data, const uint8_t* __restrict__ quant_tbl, int i, int j)
+{
+	// Dequantize
+	float dct = in_data[i*8+j];
+	out_data[UV_indexes[i*8+j]] = (float) round((dct*quant_tbl[i*8+j]) / 4.0f);
+	__syncthreads();
+
+	// Scale
+	if(i == 0) {
+		out_data[i*8+j] *= ISQRT2;
+	}
+	if(j == 0) {
+		out_data[i*8+j] *= ISQRT2;
+	}
+	in_data[i*8+j] = out_data[i*8+j];
+	__syncthreads();
+
+	// First idct - mb2 = mb - and transpose
+	float idct = 0;
+	int k;
+	for (k = 0; k < 8; ++k) {
+		idct += in_data[j*8+k] * dct_lookup[i*8+k];
+	}
+
+	out_data[i*8+j] = idct;
+	__syncthreads();
+
+	// Second idct - mb2 = mb - and transpose
+	idct = 0;
+	for (k = 0; k < 8; ++k) {
+		idct += out_data[j*8+k] * dct_lookup[i*8+k];
+	}
+	in_data[i*8+j] = idct;
+}
+
+__global__
+void dequantize_idct(const int16_t* __restrict__ in_data, const uint8_t* __restrict__ prediction, int w, uint8_t* __restrict__ out_data, int quantization)
+{
+	const int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
+
+ 	const int i = threadIdx.y;
+ 	const int j = threadIdx.x;
 
  	__shared__ float idct_in[64];
  	__shared__ float idct_out[64];
@@ -25,11 +96,11 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_
  	idct_in[i*8+j] = (float) in_data[block_offset + i*8+j];
  	__syncthreads();
 
-	dequant_idct_block_8x8(idct_in, idct_out, quantization, i, j);
+	dequant_idct_block_8x8(idct_in, idct_out, quant_table + quantization*64, i, j);
 
-	int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i * w + j;
+	const int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i * w + j;
 
-	int16_t tmp = (int16_t) idct_out[i*8+j] + (int16_t) (prediction[offset]);
+	int16_t tmp = (int16_t) idct_in[i*8+j] + (int16_t) (prediction[offset]);
 	if (tmp < 0)
 	{
 		tmp = 0;
@@ -45,23 +116,23 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_
 
 
 __global__
-void dct_quantize(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_data, int quantization)
+void dct_quantize(const uint8_t* __restrict__ in_data, const uint8_t* __restrict__ prediction, int w, int16_t* __restrict__ out_data, int quantization)
 {
-	int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
+	const int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
 
-	int i = threadIdx.y;
-	int j = threadIdx.x;
+	const int i = threadIdx.y;
+	const int j = threadIdx.x;
 
-	int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i*w+j;
+	const int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i*w+j;
 
-	__shared__ float dct_in[64];
-	__shared__ float dct_out[64];
+	__shared__ float dct_in[65];
+	__shared__ float dct_out[65];
 
 	dct_in[i*8+j] = ((float) in_data[offset] - prediction[offset]);
 	__syncthreads();
-	dct_quant_block_8x8(dct_in, dct_out, quantization, i, j);
+	dct_quant_block_8x8(dct_in, dct_out, out_data + block_offset, quant_table + quantization*64, i, j);
 
-	out_data[block_offset + i*8+j] = dct_in[i*8+j];
+	//out_data[block_offset + i*8+j] = dct_in[i*8+j];
 }
 
 
