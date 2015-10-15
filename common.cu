@@ -185,9 +185,6 @@ struct frame* create_frame(struct c63_common *cm)
 	cudaMallocHost((void**)&f->residuals->Udct, cm->upw * cm->uph * sizeof(int16_t));
 	cudaMallocHost((void**)&f->residuals->Vdct, cm->vpw * cm->vph * sizeof(int16_t));
 
-	//f->mbs[Y_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsY * cm->mb_colsY, sizeof(struct macroblock));
-	//f->mbs[U_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
-	//f->mbs[V_COMPONENT] = (struct macroblock*) calloc(cm->mb_rowsUV * cm->mb_colsUV, sizeof(struct macroblock));
 	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock));
 	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
 	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
@@ -219,9 +216,6 @@ yuv_t* create_image(struct c63_common *cm)
 	cudaHostAlloc((void**)&image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaHostAllocWriteCombined);
 	cudaHostAlloc((void**)&image->U, cm->upw * cm->uph * sizeof(uint8_t), cudaHostAllocWriteCombined);
 	cudaHostAlloc((void**)&image->V, cm->vpw * cm->vph * sizeof(uint8_t), cudaHostAllocWriteCombined);
-	//image->Y = (uint8_t*) malloc(cm->ypw * cm->yph * sizeof(uint8_t));
-	//image->U = (uint8_t*) malloc(cm->upw * cm->uph * sizeof(uint8_t));
-	//image->V = (uint8_t*) malloc(cm->vpw * cm->vph * sizeof(uint8_t));
 
 	return image;
 }

@@ -2,7 +2,8 @@ CC = gcc
 NVCC = nvcc
 
 CCFLAGS = -Wall
-NVCCFLAGS = -std=c++11 -fmad=false -arch sm_50 -Xptxas -warn-spills -lineinfo
+NVCCFLAGS = -std=c++11 -fmad=false -arch sm_50 -lineinfo
+PTXFLAGS = -warn-double-usage -warn-lmem-usage -warn-spills
 LDFLAGS = -lm
 
 DEBUG ?= 0
@@ -16,11 +17,12 @@ endif
 
 ALL_NVCCFLAGS = $(NVCCFLAGS)
 ALL_NVCCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
+ALL_NVCCFLAGS += $(addprefix -Xptxas ,$(PTXFLAGS))
 
 ALL_LDFLAGS = $(addprefix -Xlinker ,$(LDFLAGS))
 
-VIDEO ?= 1
-FRAMES ?= 300
+VIDEO ?= 0
+FRAMES ?= 0
 
 ifeq ($(VIDEO),0)
 	WIDTH = 352
@@ -34,6 +36,12 @@ else ifeq ($(VIDEO),1)
 	INPUT_VIDEO = /opt/cipr/foreman_4k.yuv
 	OUTPUT_VIDEO = ~/yuv/test/foreman_4k.yuv
 	REFERENCE_VIDEO = ~/yuv/reference/foreman_4k.yuv
+else ifeq ($(VIDEO),2)
+	WIDTH = 1920
+	HEIGHT = 1080
+	INPUT_VIDEO = /opt/cipr/tractor.yuv
+	OUTPUT_VIDEO = ~/yuv/test/tractor.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/tractor.yuv
 endif
 
 all: c63enc #c63dec c63pred
