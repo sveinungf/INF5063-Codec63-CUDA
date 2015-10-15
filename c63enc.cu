@@ -237,10 +237,11 @@ static void init_boundaries(c63_common* cm)
 	cudaMalloc((void**) &boundUV->top, cm->mb_rowsUV * sizeof(int));
 	cudaMalloc((void**) &boundUV->bottom, cm->mb_rowsUV * sizeof(int));
 
-	cudaMemcpy((void*) boundY->left, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*) boundY->right, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*) boundY->top, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*) boundY->bottom, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
+	const cudaStream_t& streamY = cm->cuda_data.streamY;
+	cudaMemcpyAsync((void*) boundY->left, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->right, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->top, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->bottom, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
 
 	cudaMemcpy((void*) boundUV->left, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy((void*) boundUV->right, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
@@ -338,22 +339,24 @@ struct c63_common* init_c63_enc(int width, int height)
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
   }
 
+  init_cuda_data(cm);
+
   cm->curframe = create_frame(cm);
   cm->refframe = create_frame(cm);
 
   init_boundaries(cm);
-  init_cuda_data(cm);
 
   return cm;
 }
 
 void free_c63_enc(struct c63_common* cm)
 {
-	deinit_cuda_data(cm);
 	deinit_boundaries(cm);
 
 	destroy_frame(cm->curframe);
 	destroy_frame(cm->refframe);
+
+	deinit_cuda_data(cm);
 
 	free(cm);
 }

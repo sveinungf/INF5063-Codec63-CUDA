@@ -169,9 +169,9 @@ static void deinit_frame_gpu(struct frame* f)
 	cudaFree(f->mbs_gpu[V_COMPONENT]);
 }
 
-struct macroblock *create_mb(struct macroblock *mb, size_t size) {
+struct macroblock *create_mb(struct macroblock *mb, size_t size, const cudaStream_t& stream) {
 	cudaMallocHost((void**)&mb, size);
-	cudaMemset(mb, 0, size);
+	cudaMemsetAsync(mb, 0, size, stream);
 
 	return mb;
 }
@@ -185,9 +185,11 @@ struct frame* create_frame(struct c63_common *cm)
 	cudaMallocHost((void**)&f->residuals->Udct, cm->upw * cm->uph * sizeof(int16_t));
 	cudaMallocHost((void**)&f->residuals->Vdct, cm->vpw * cm->vph * sizeof(int16_t));
 
-	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock));
+	size_t sizeY = cm->mb_rowsY * cm->mb_colsY * sizeof(struct macroblock);
+	size_t sizeUV = cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock);
+	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], sizeY, cm->cuda_data.streamY);
+	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], sizeUV, cm->cuda_data.streamU);
+	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], sizeUV, cm->cuda_data.streamV);
 
 	init_frame_gpu(cm, f);
 
