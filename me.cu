@@ -366,9 +366,10 @@ static void mc_block_8x8_gpu(const struct macroblock* __restrict__ mbs, int w, u
 
 	const struct macroblock* mb = &mbs[mb_index];
 
-	if (!mb->use_mv) {
-		return;
-	}
+	// We always assume MV to be beneficial
+	//if (!mb->use_mv) {
+	//	return;
+	//}
 
 	const int mv_x = mb->mv_x;
 	const int mv_y = mb->mv_y;
