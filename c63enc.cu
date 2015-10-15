@@ -39,6 +39,45 @@ uint64_t rdtsc(){
     return ((uint64_t)hi << 32) | lo;
 }
 
+/*
+static void image_to_linear(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
+{
+	int size_Y = cm->ypw * cm->yph;
+	int size_UV = cm->upw * cm->uph;
+
+	uint8_t out_Y[size_Y * sizeof(uint8_t)];
+	uint8_t out_U[size_UV * sizeof(uint8_t)];
+	uint8_t out_V[size_UV * sizeof(uint8_t)];
+
+	int block_offset1, block_offset2;
+	int mb, i, j;
+	for (mb = 0; mb < size_Y/64; ++mb) {
+		block_offset1 = mb*64;
+		for (i = 0; i < 8; ++i) {
+			block_offset2 = ((mb/cm->ypw)/8) * 8*(cm->ypw+1) + i*cm->ypw;
+			for (j = 0; j < 8; ++j) {
+				out_Y[block_offset1 + i*8+j] = image->Y[block_offset2 + j];
+			}
+		}
+	}
+
+	for (mb = 0; mb < size_Y/64; ++mb) {
+		block_offset1 = mb*64;
+			for (i = 0; i < 8; ++i) {
+				block_offset2 = ((mb/cm->upw)/8) * 8*(cm->upw+1) + i*cm->upw;
+				for (j = 0; j < 8; ++j) {
+					out_U[block_offset1 + i*8+j] = image->U[block_offset2 + j];
+					out_V[block_offset1 + i*8+j] = image->V[block_offset2 + j];
+				}
+			}
+		}
+
+	cudaMemcpy(image_gpu->Y, out_Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->U, out_U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(image_gpu->V, out_V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
+}
+*/
+
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
 static bool read_yuv(FILE *file, yuv_t* image)
 {
@@ -120,10 +159,13 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 	dct_t* residuals = cm->curframe->residuals_gpu;
 
 	const dim3 threadsPerBlock(8, 8);
+	const dim3 threadsPerBlock2(16, 16);
 
 	const dim3 numBlocks_Y(cm->padw[Y_COMPONENT]/threadsPerBlock.x, cm->padh[Y_COMPONENT]/threadsPerBlock.y);
-	const dim3 numBlocks_U(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
-	const dim3 numBlocks_V(cm->padw[V_COMPONENT]/threadsPerBlock.x, cm->padh[V_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_UV(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_Y2(cm->padw[Y_COMPONENT]/threadsPerBlock2.x, cm->padh[Y_COMPONENT]/threadsPerBlock2.y);
+	const dim3 numBlocks_UV2(cm->padw[U_COMPONENT]/threadsPerBlock2.x, cm->padh[U_COMPONENT]/threadsPerBlock2.y);
+	//image_to_linear(cm, cm->image, cm->curframe->orig_gpu);
 
 	/* DCT and Quantization */
 	dct_quantize<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_data.streamY>>>(cm->curframe->orig_gpu->Y, predicted->Y,
@@ -131,12 +173,12 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 	cudaMemcpyAsync(cm->curframe->residuals->Ydct, residuals->Ydct, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]*sizeof(int16_t),
 			cudaMemcpyDeviceToHost, cm->cuda_data.streamY);
 
-	dct_quantize<<<numBlocks_U, threadsPerBlock, 0, cm->cuda_data.streamU>>>(cm->curframe->orig_gpu->U, predicted->U,
+	dct_quantize<<<numBlocks_UV, threadsPerBlock, 0, cm->cuda_data.streamU>>>(cm->curframe->orig_gpu->U, predicted->U,
 			cm->padw[U_COMPONENT], residuals->Udct, U_COMPONENT);
 	cudaMemcpyAsync(cm->curframe->residuals->Udct, residuals->Udct, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]*sizeof(int16_t),
 			cudaMemcpyDeviceToHost, cm->cuda_data.streamU);
 
-	dct_quantize<<<numBlocks_V, threadsPerBlock, 0, cm->cuda_data.streamV>>>(cm->curframe->orig_gpu->V, predicted->V,
+	dct_quantize<<<numBlocks_UV, threadsPerBlock, 0, cm->cuda_data.streamV>>>(cm->curframe->orig_gpu->V, predicted->V,
 			cm->padw[V_COMPONENT], residuals->Vdct, V_COMPONENT);
 	cudaMemcpyAsync(cm->curframe->residuals->Vdct, residuals->Vdct, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]*sizeof(int16_t),
 			cudaMemcpyDeviceToHost, cm->cuda_data.streamV);
@@ -145,10 +187,10 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 	dequantize_idct<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_data.streamY>>>(residuals->Ydct, predicted->Y,
 			cm->ypw, cm->curframe->recons_gpu->Y, Y_COMPONENT);
 
-	dequantize_idct<<<numBlocks_U, threadsPerBlock, 0, cm->cuda_data.streamU>>>(residuals->Udct, predicted->U,
+	dequantize_idct<<<numBlocks_UV, threadsPerBlock, 0, cm->cuda_data.streamU>>>(residuals->Udct, predicted->U,
 			cm->upw, cm->curframe->recons_gpu->U, U_COMPONENT);
 
-	dequantize_idct<<<numBlocks_V, threadsPerBlock, 0, cm->cuda_data.streamV>>>(residuals->Vdct, predicted->V,
+	dequantize_idct<<<numBlocks_UV, threadsPerBlock, 0, cm->cuda_data.streamV>>>(residuals->Vdct, predicted->V,
 			cm->vpw, cm->curframe->recons_gpu->V, V_COMPONENT);
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
@@ -423,14 +465,19 @@ int main(int argc, char **argv)
 	int numframes = 0;
 
 	yuv_t *image = create_image(cm);
+	//cm->image = create_image(cm);
 	yuv_t *image_gpu = create_image_gpu(cm);
 
 	// Read the first image (image 0) from disk
 	bool ok = read_yuv(infile, image);
+	//bool ok = read_yuv(infile, cm->image);
+
 
 	if (ok) {
 		// Copy the first image to GPU asynchronously
 		copy_image_to_gpu(cm, image, image_gpu);
+		//copy_image_to_gpu(cm, cm->image, image_gpu);
+
 
 		printf("Encoding frame %d, ", numframes);
 		++numframes;
@@ -446,6 +493,7 @@ int main(int argc, char **argv)
 		{
 			// Read the current image from disk
 			ok = read_yuv(infile, image);
+			//ok = read_yuv(infile, cm->image);
 			if (!ok)
 			{
 				break;
@@ -453,6 +501,8 @@ int main(int argc, char **argv)
 
 			// We need the reconstructed previous image
 			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
+			// Remove
+			//std::swap(cm->image, cm2->image);
 
 			// Wait until the previous image has been encoded
 			cudaStreamSynchronize(cm->cuda_data.streamY);
@@ -462,6 +512,7 @@ int main(int argc, char **argv)
 
 			// Copy the current image to GPU asynchronously
 			copy_image_to_gpu(cm2, image, image_gpu);
+			//copy_image_to_gpu(cm2, cm2->image, image_gpu);
 
 			printf("Encoding frame %d, ", numframes);
 			++numframes;
@@ -491,6 +542,7 @@ int main(int argc, char **argv)
 	}
 
 	destroy_image(image);
+	//destroy_image(cm->image);
 	destroy_image_gpu(image_gpu);
 
 	cleanup_cuda_data(cm);

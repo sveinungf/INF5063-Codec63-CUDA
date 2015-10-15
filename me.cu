@@ -111,6 +111,7 @@ static void me_block_8x8_gpu(struct macroblock* mbs, uint8_t* orig, uint8_t* ref
 	{
 		block_sad = 0;
 
+		#pragma unroll
 		for (int y = 0; y < 8; ++y)
 		{
 			uint32_t* ref_block_row_aligned = (uint32_t*) (ref_block_top_row_aligned + y*w);
@@ -205,37 +206,24 @@ void c63_motion_estimate(struct c63_common *cm)
 
 /* Motion compensation for 8x8 block */
 __global__
-static void mc_block_8x8_gpu(struct macroblock* mbs, int w, uint8_t *predicted, uint8_t *ref)
+static void mc_block_8x8_gpu(const struct macroblock* __restrict__ mbs, int w, uint8_t __restrict__ *predicted, const uint8_t __restrict__ *ref)
 {
-	int mb_x = blockIdx.x;
-	int mb_y = threadIdx.x;
+	const int mb_index = (blockIdx.x + blockIdx.y * gridDim.x);
+	const int block_offset = mb_index * blockDim.x * blockDim.y;
+	const int i = threadIdx.y;
+	const int j = threadIdx.x;
 
-	int index = mb_y * w / 8 + mb_x;
-
-	struct macroblock* mb = &mbs[index];
+	const struct macroblock* mb = &mbs[mb_index];
 
 	if (!mb->use_mv) {
 		return;
 	}
 
-	int mv_x = mb->mv_x;
-	int mv_y = mb->mv_y;
+	const int mv_x = mb->mv_x;
+	const int mv_y = mb->mv_y;
 
-	int left = mb_x * 8;
-	int top = mb_y * 8;
-	int right = left + 8;
-	int bottom = top + 8;
-
-	/* Copy block from ref mandated by MV */
-	int x, y;
-
-	for (y = top; y < bottom; ++y)
-	{
-		for (x = left; x < right; ++x)
-		{
-			predicted[y * w + x] = ref[(y + mv_y) * w + (x + mv_x)];
-		}
-	}
+	/* Copy pixel from ref mandated by MV */
+	predicted[block_offset + i * 8 + j] = ref[(i + blockIdx.y*8 + mv_y) * w + (j + blockIdx.x*8 + mv_x)];
 }
 
 void c63_motion_compensate(struct c63_common *cm)
@@ -244,16 +232,15 @@ void c63_motion_compensate(struct c63_common *cm)
 	yuv_t* pred = cm->curframe->predicted_gpu;
 	yuv_t* ref = cm->refframe->recons_gpu;
 
-	int wY = cm->padw[Y_COMPONENT];
-	int wU = cm->padw[U_COMPONENT];
-	int wV = cm->padw[V_COMPONENT];
+	dim3 threadsPerBlock(8, 8);
+	const dim3 numBlocks_Y(cm->padw[Y_COMPONENT]/threadsPerBlock.x, cm->padh[Y_COMPONENT]/threadsPerBlock.y);
+	const dim3 numBlocks_UV(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
 
 	/* Luma */
-	// TODO: Number of macroblock rows are now limited to 1024. Number of threads per block should
-	// ideally be a multiplum of the warp size (32).
-	mc_block_8x8_gpu<<<cm->mb_colsY, cm->mb_rowsY, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], wY, pred->Y, ref->Y);
+	mc_block_8x8_gpu<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_data.streamY>>>(mbs[Y_COMPONENT], cm->padw[Y_COMPONENT], pred->Y, ref->Y);
 
 	/* Chroma */
-	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], wU, pred->U, ref->U);
-	mc_block_8x8_gpu<<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], wV, pred->V, ref->V);
+	mc_block_8x8_gpu<<<numBlocks_UV, threadsPerBlock, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], cm->padw[U_COMPONENT], pred->U, ref->U);
+	mc_block_8x8_gpu<<<numBlocks_UV, threadsPerBlock, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], cm->padw[V_COMPONENT], pred->V, ref->V);
 }
+
