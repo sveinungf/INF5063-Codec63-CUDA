@@ -438,19 +438,14 @@ int main(int argc, char **argv)
 	int numframes = 0;
 
 	yuv_t *image = create_image(cm);
-	//cm->image = create_image(cm);
 	yuv_t *image_gpu = create_image_gpu(cm);
 
 	// Read the first image (image 0) from disk
 	bool ok = read_yuv(infile, image);
-	//bool ok = read_yuv(infile, cm->image);
-
 
 	if (ok) {
 		// Copy the first image to GPU asynchronously
 		copy_image_to_gpu(cm, image, image_gpu);
-		//copy_image_to_gpu(cm, cm->image, image_gpu);
-
 
 		printf("Encoding frame %d, ", numframes);
 		++numframes;
@@ -466,7 +461,6 @@ int main(int argc, char **argv)
 		{
 			// Read the current image from disk
 			ok = read_yuv(infile, image);
-			//ok = read_yuv(infile, cm->image);
 			if (!ok)
 			{
 				break;
@@ -474,8 +468,6 @@ int main(int argc, char **argv)
 
 			// We need the reconstructed previous image
 			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
-			// Remove
-			//std::swap(cm->image, cm2->image);
 
 			// Wait until the previous image has been encoded
 			cudaStreamSynchronize(cm->cuda_data.streamY);
@@ -485,7 +477,6 @@ int main(int argc, char **argv)
 
 			// Copy the current image to GPU asynchronously
 			copy_image_to_gpu(cm2, image, image_gpu);
-			//copy_image_to_gpu(cm2, cm2->image, image_gpu);
 
 			printf("Encoding frame %d, ", numframes);
 			++numframes;
@@ -515,7 +506,6 @@ int main(int argc, char **argv)
 	}
 
 	destroy_image(image);
-	//destroy_image(cm->image);
 	destroy_image_gpu(image_gpu);
 
 	free_c63_enc(cm);
