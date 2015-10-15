@@ -79,9 +79,9 @@ static bool read_yuv(FILE *file, yuv_t* image)
 static void zero_out_prediction(struct c63_common* cm)
 {
 	struct frame* frame = cm->curframe;
-	cudaMemset(frame->predicted_gpu->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t));
-	cudaMemset(frame->predicted_gpu->U, 0, cm->upw * cm->uph * sizeof(uint8_t));
-	cudaMemset(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t));
+	cudaMemsetAsync(frame->predicted_gpu->Y, 0, cm->ypw * cm->yph * sizeof(uint8_t), cm->cuda_data.streamY);
+	cudaMemsetAsync(frame->predicted_gpu->U, 0, cm->upw * cm->uph * sizeof(uint8_t), cm->cuda_data.streamU);
+	cudaMemsetAsync(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t), cm->cuda_data.streamV);
 }
 
 static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
