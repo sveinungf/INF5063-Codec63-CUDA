@@ -14,11 +14,6 @@
 __device__
 static void dct_quant_block_8x8(float* in_data, float *out_data, int16_t __restrict__ *global_out, const uint8_t* __restrict__ quant_tbl, int i, const int j)
 {
-	/*
-	int mb_offset = (i/4) * 64;
-	int j_8 = j%8;
-	int i_8 = ((i%4) * 16)/8 + j/8;
-*/
 	// First dct_1d - mb = mb2 - and transpose
 	float dct = 0;
 	int k;
@@ -34,7 +29,6 @@ static void dct_quant_block_8x8(float* in_data, float *out_data, int16_t __restr
 	#pragma unroll
 	for (k = 0; k < 8; ++k) {
 		dct += out_data[j*8+k] * dct_lookup_trans[i*8+k];
-		//test[i*64+k*8+j] = out_data[i*8+j] * dct_lookup_trans[k*8+j];
 	}
 
 	// Scale
@@ -65,13 +59,9 @@ void dct_quantize(const uint8_t* __restrict__ in_data, const uint8_t* __restrict
 	__shared__ float dct_in[65];
 	__shared__ float dct_out[65];
 
-	//dct_in[i*8+j] = ((float) in_data[offset] - prediction[offset]);
 	dct_in[i*8+j] = ((float) in_data[offset] - prediction[block_offset + i*8+j]);
-	//dct_in[i*8+j] = ((float) in_data[block_offset+i*8+j] - prediction[block_offset+i*8+j]);
 	__syncthreads();
 	dct_quant_block_8x8(dct_in, dct_out, out_data + block_offset, quant_table + quantization*64, i, j);
-
-	//out_data[block_offset + i*8+j] = dct_in[i*8+j];
 }
 
 
@@ -96,6 +86,7 @@ static void dequant_idct_block_8x8(float *in_data, float *out_data, const uint8_
 	// First idct - mb2 = mb - and transpose
 	float idct = 0;
 	int k;
+	#pragma unroll
 	for (k = 0; k < 8; ++k) {
 		idct += in_data[j*8+k] * dct_lookup[i*8+k];
 	}
@@ -105,6 +96,7 @@ static void dequant_idct_block_8x8(float *in_data, float *out_data, const uint8_
 
 	// Second idct - mb2 = mb - and transpose
 	idct = 0;
+	#pragma unroll
 	for (k = 0; k < 8; ++k) {
 		idct += out_data[j*8+k] * dct_lookup[i*8+k];
 	}
@@ -129,10 +121,7 @@ void dequantize_idct(const int16_t* __restrict__ in_data, const uint8_t* __restr
 
 	const int offset = blockIdx.x * 8 + blockIdx.y * w*8 + i*w+j;
 
-	//int16_t tmp = (int16_t) idct_in[i*8+j] + (int16_t) (prediction[offset]);
 	int16_t tmp = (int16_t) idct_in[i*8+j] + (int16_t) prediction[block_offset+i*8+j];
-
-	//out_data[offset] = min(max(tmp, 0), 255);
 
 	if (tmp < 0)
 	{

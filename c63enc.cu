@@ -39,44 +39,6 @@ uint64_t rdtsc(){
     return ((uint64_t)hi << 32) | lo;
 }
 
-/*
-static void image_to_linear(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
-{
-	int size_Y = cm->ypw * cm->yph;
-	int size_UV = cm->upw * cm->uph;
-
-	uint8_t out_Y[size_Y * sizeof(uint8_t)];
-	uint8_t out_U[size_UV * sizeof(uint8_t)];
-	uint8_t out_V[size_UV * sizeof(uint8_t)];
-
-	int block_offset1, block_offset2;
-	int mb, i, j;
-	for (mb = 0; mb < size_Y/64; ++mb) {
-		block_offset1 = mb*64;
-		for (i = 0; i < 8; ++i) {
-			block_offset2 = ((mb/cm->ypw)/8) * 8*(cm->ypw+1) + i*cm->ypw;
-			for (j = 0; j < 8; ++j) {
-				out_Y[block_offset1 + i*8+j] = image->Y[block_offset2 + j];
-			}
-		}
-	}
-
-	for (mb = 0; mb < size_Y/64; ++mb) {
-		block_offset1 = mb*64;
-			for (i = 0; i < 8; ++i) {
-				block_offset2 = ((mb/cm->upw)/8) * 8*(cm->upw+1) + i*cm->upw;
-				for (j = 0; j < 8; ++j) {
-					out_U[block_offset1 + i*8+j] = image->U[block_offset2 + j];
-					out_V[block_offset1 + i*8+j] = image->V[block_offset2 + j];
-				}
-			}
-		}
-
-	cudaMemcpy(image_gpu->Y, out_Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image_gpu->U, out_U, cm->upw * cm->uph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(image_gpu->V, out_V, cm->vpw * cm->vph * sizeof(uint8_t), cudaMemcpyHostToDevice);
-}
-*/
 
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
 static bool read_yuv(FILE *file, yuv_t* image)
@@ -163,9 +125,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 
 	const dim3 numBlocks_Y(cm->padw[Y_COMPONENT]/threadsPerBlock.x, cm->padh[Y_COMPONENT]/threadsPerBlock.y);
 	const dim3 numBlocks_UV(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
-	const dim3 numBlocks_Y2(cm->padw[Y_COMPONENT]/threadsPerBlock2.x, cm->padh[Y_COMPONENT]/threadsPerBlock2.y);
-	const dim3 numBlocks_UV2(cm->padw[U_COMPONENT]/threadsPerBlock2.x, cm->padh[U_COMPONENT]/threadsPerBlock2.y);
-	//image_to_linear(cm, cm->image, cm->curframe->orig_gpu);
 
 	/* DCT and Quantization */
 	dct_quantize<<<numBlocks_Y, threadsPerBlock, 0, cm->cuda_data.streamY>>>(cm->curframe->orig_gpu->Y, predicted->Y,
