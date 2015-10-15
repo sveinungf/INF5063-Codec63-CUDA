@@ -67,7 +67,9 @@ static void min_reduce(int i, int* values)
 
 template<int range>
 __global__
-static void me_block_8x8_gpu_Y(uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
+static void me_block_8x8_gpu_Y(const uint8_t* __restrict__ orig, const uint8_t* __restrict__ ref,
+		const int* __restrict__ lefts, const int* __restrict__ rights, const int* __restrict__ tops,
+		const int* __restrict__ bottoms, int w, unsigned int* __restrict__ index_results)
 {
 	const int i = threadIdx.x;
 	const int j = threadIdx.y;
@@ -89,8 +91,8 @@ static void me_block_8x8_gpu_Y(uint8_t* orig, uint8_t* ref, int* lefts, int* rig
 	const int mx = mb_x * 8;
 	const int my = mb_y * 8;
 
-	uint8_t* orig_block = orig + my * w + mx;
-	uint8_t* ref_search_range = ref + top*w + left;
+	const uint8_t* orig_block = orig + my * w + mx;
+	const uint8_t* ref_search_range = ref + top*w + left;
 
 	__shared__ uint8_t shared_orig_block[64];
 
@@ -112,7 +114,7 @@ static void me_block_8x8_gpu_Y(uint8_t* orig, uint8_t* ref, int* lefts, int* rig
 	const unsigned int mask = 0x3210 + 0x1111 * (i%4);
 
 	// (i/4)*4 rounds i down to the nearest integer divisible by 4
-	uint8_t* ref_block_top_row_aligned = ref_search_range + (j*4)*w + (i/4)*4;
+	const uint8_t* ref_block_top_row_aligned = ref_search_range + (j*4)*w + (i/4)*4;
 
 	if (j < range_height && i < range_width)
 	{
@@ -210,7 +212,9 @@ static void me_block_8x8_gpu_Y(uint8_t* orig, uint8_t* ref, int* lefts, int* rig
 
 template<int range>
 __global__
-static void me_block_8x8_gpu_UV(uint8_t* orig, uint8_t* ref, int* lefts, int* rights, int* tops, int* bottoms, int w, unsigned int* index_results)
+static void me_block_8x8_gpu_UV(const uint8_t* __restrict__ orig, const uint8_t* __restrict__ ref,
+		const int* __restrict__ lefts, const int* __restrict__ rights, const int* __restrict__ tops,
+		const int* __restrict__ bottoms, int w, unsigned int* __restrict__ index_results)
 {
 	const int i = threadIdx.x;
 	const int j = threadIdx.y;
@@ -228,8 +232,8 @@ static void me_block_8x8_gpu_UV(uint8_t* orig, uint8_t* ref, int* lefts, int* ri
 	const int mx = mb_x * 8;
 	const int my = mb_y * 8;
 
-	uint8_t* orig_block = orig + my * w + mx;
-	uint8_t* ref_search_range = ref + top*w + left;
+	const uint8_t* orig_block = orig + my * w + mx;
+	const uint8_t* ref_search_range = ref + top*w + left;
 
 	__shared__ uint8_t shared_orig_block[64];
 
@@ -248,7 +252,7 @@ static void me_block_8x8_gpu_UV(uint8_t* orig, uint8_t* ref, int* lefts, int* ri
 	const unsigned int mask = 0x3210 + 0x1111 * (i%4);
 
 	// (i/4)*4 rounds i down to the nearest integer divisible by 4
-	uint8_t* ref_block_top_row_aligned = ref_search_range + j*w + (i/4)*4;
+	const uint8_t* ref_block_top_row_aligned = ref_search_range + j*w + (i/4)*4;
 
 	if (j < range_height && i < range_width)
 	{
@@ -291,7 +295,8 @@ static void me_block_8x8_gpu_UV(uint8_t* orig, uint8_t* ref, int* lefts, int* ri
 
 template<int range>
 __global__
-static void set_motion_vectors(struct macroblock* mbs, int* lefts, int* tops, unsigned int* index_results)
+static void set_motion_vectors(struct macroblock* __restrict__ mbs, const int* __restrict__ lefts,
+		int* tops, const unsigned int* __restrict__ index_results)
 {
 	const int mb_x = blockIdx.x;
 	const int mb_y = threadIdx.x;
@@ -349,14 +354,15 @@ void c63_motion_estimate(struct c63_common *cm)
 
 /* Motion compensation for 8x8 block */
 __global__
-static void mc_block_8x8_gpu(struct macroblock* mbs, int w, uint8_t *predicted, uint8_t *ref)
+static void mc_block_8x8_gpu(const struct macroblock* __restrict__ mbs, int w,
+		uint8_t* __restrict__ predicted, const uint8_t* __restrict__ ref)
 {
 	int mb_x = blockIdx.x;
 	int mb_y = threadIdx.x;
 
 	int index = mb_y * w / 8 + mb_x;
 
-	struct macroblock* mb = &mbs[index];
+	const struct macroblock* mb = &mbs[index];
 
 	if (!mb->use_mv) {
 		return;
