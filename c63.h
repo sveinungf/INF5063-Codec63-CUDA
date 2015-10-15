@@ -93,6 +93,14 @@ struct frame
   int keyframe;
 };
 
+struct boundaries
+{
+	const int* __restrict__ left;
+	const int* __restrict__ right;
+	const int* __restrict__ top;
+	const int* __restrict__ bottom;
+};
+
 struct cuda_data
 {
 	cudaStream_t streamY;
@@ -102,15 +110,6 @@ struct cuda_data
 	unsigned int* sad_index_resultsY;
 	unsigned int* sad_index_resultsU;
 	unsigned int* sad_index_resultsV;
-
-	int* leftsY_gpu;
-	int* leftsUV_gpu;
-	int* rightsY_gpu;
-	int* rightsUV_gpu;
-	int* topsY_gpu;
-	int* topsUV_gpu;
-	int* bottomsY_gpu;
-	int* bottomsUV_gpu;
 };
 
 struct c63_common
@@ -138,6 +137,9 @@ struct c63_common
   int frames_since_keyframe;
 
   struct entropy_ctx e_ctx;
+
+  struct boundaries me_boundariesY;
+  struct boundaries me_boundariesUV;
 
   struct cuda_data cuda_data;
 };

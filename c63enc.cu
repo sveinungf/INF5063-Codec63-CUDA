@@ -155,7 +155,7 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
      prediction is correct */
 }
 
-static void set_searchrange_boundaries_cuda(c63_common* cm)
+static void init_boundaries(c63_common* cm)
 {
 	int hY = cm->padh[Y_COMPONENT];
 	int hUV = cm->padh[U_COMPONENT];
@@ -224,14 +224,27 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 		}
 	}
 
-	cudaMemcpy(cm->cuda_data.leftsY_gpu, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.leftsUV_gpu, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.rightsY_gpu, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.rightsUV_gpu, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.topsY_gpu, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.topsUV_gpu, topsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.bottomsY_gpu, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(cm->cuda_data.bottomsUV_gpu, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
+	struct boundaries* boundY = &cm->me_boundariesY;
+	cudaMalloc((void**) &boundY->left, cm->mb_colsY * sizeof(int));
+	cudaMalloc((void**) &boundY->right, cm->mb_colsY * sizeof(int));
+	cudaMalloc((void**) &boundY->top, cm->mb_rowsY * sizeof(int));
+	cudaMalloc((void**) &boundY->bottom, cm->mb_rowsY * sizeof(int));
+
+	struct boundaries* boundUV = &cm->me_boundariesUV;
+	cudaMalloc((void**) &boundUV->left, cm->mb_colsUV * sizeof(int));
+	cudaMalloc((void**) &boundUV->right, cm->mb_colsUV * sizeof(int));
+	cudaMalloc((void**) &boundUV->top, cm->mb_rowsUV * sizeof(int));
+	cudaMalloc((void**) &boundUV->bottom, cm->mb_rowsUV * sizeof(int));
+
+	cudaMemcpy((void*) boundY->left, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundY->right, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundY->top, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundY->bottom, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice);
+
+	cudaMemcpy((void*) boundUV->left, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->right, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->top, topsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->bottom, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
 
 	delete[] leftsY;
 	delete[] leftsUV;
@@ -241,6 +254,19 @@ static void set_searchrange_boundaries_cuda(c63_common* cm)
 	delete[] topsUV;
 	delete[] bottomsY;
 	delete[] bottomsUV;
+}
+
+static void deinit_boundaries(c63_common* cm)
+{
+	cudaFree((void*) cm->me_boundariesY.left);
+	cudaFree((void*) cm->me_boundariesY.right);
+	cudaFree((void*) cm->me_boundariesY.top);
+	cudaFree((void*) cm->me_boundariesY.bottom);
+
+	cudaFree((void*) cm->me_boundariesUV.left);
+	cudaFree((void*) cm->me_boundariesUV.right);
+	cudaFree((void*) cm->me_boundariesUV.top);
+	cudaFree((void*) cm->me_boundariesUV.bottom);
 }
 
 static void init_cuda_data(c63_common* cm)
@@ -254,20 +280,9 @@ static void init_cuda_data(c63_common* cm)
 	cudaMalloc((void**) &cuda_me->sad_index_resultsY, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int));
 	cudaMalloc((void**) &cuda_me->sad_index_resultsU, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int));
 	cudaMalloc((void**) &cuda_me->sad_index_resultsV, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int));
-
-	cudaMalloc((void**) &(cuda_me->leftsY_gpu), cm->mb_colsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->leftsUV_gpu), cm->mb_colsUV * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->rightsY_gpu), cm->mb_colsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->rightsUV_gpu), cm->mb_colsUV * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->topsY_gpu), cm->mb_rowsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->topsUV_gpu), cm->mb_rowsUV * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->bottomsY_gpu), cm->mb_rowsY * sizeof(int));
-	cudaMalloc((void**) &(cuda_me->bottomsUV_gpu), cm->mb_rowsUV * sizeof(int));
-
-	set_searchrange_boundaries_cuda(cm);
 }
 
-static void cleanup_cuda_data(c63_common* cm)
+static void deinit_cuda_data(c63_common* cm)
 {
 	cudaStreamDestroy(cm->cuda_data.streamY);
 	cudaStreamDestroy(cm->cuda_data.streamU);
@@ -276,15 +291,6 @@ static void cleanup_cuda_data(c63_common* cm)
 	cudaFree(cm->cuda_data.sad_index_resultsY);
 	cudaFree(cm->cuda_data.sad_index_resultsU);
 	cudaFree(cm->cuda_data.sad_index_resultsV);
-
-	cudaFree(cm->cuda_data.leftsY_gpu);
-	cudaFree(cm->cuda_data.leftsUV_gpu);
-	cudaFree(cm->cuda_data.rightsY_gpu);
-	cudaFree(cm->cuda_data.rightsUV_gpu);
-	cudaFree(cm->cuda_data.topsY_gpu);
-	cudaFree(cm->cuda_data.topsUV_gpu);
-	cudaFree(cm->cuda_data.bottomsY_gpu);
-	cudaFree(cm->cuda_data.bottomsUV_gpu);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, yuv_t* image, yuv_t* image_gpu)
@@ -334,6 +340,7 @@ struct c63_common* init_c63_enc(int width, int height)
   cm->curframe = create_frame(cm);
   cm->refframe = create_frame(cm);
 
+  init_boundaries(cm);
   init_cuda_data(cm);
 
   return cm;
@@ -341,8 +348,12 @@ struct c63_common* init_c63_enc(int width, int height)
 
 void free_c63_enc(struct c63_common* cm)
 {
+	deinit_cuda_data(cm);
+	deinit_boundaries(cm);
+
 	destroy_frame(cm->curframe);
 	destroy_frame(cm->refframe);
+
 	free(cm);
 }
 
@@ -493,10 +504,7 @@ int main(int argc, char **argv)
 	destroy_image(image);
 	destroy_image_gpu(image_gpu);
 
-	cleanup_cuda_data(cm);
 	free_c63_enc(cm);
-
-	cleanup_cuda_data(cm2);
 	free_c63_enc(cm2);
 
 	fclose(outfile);
