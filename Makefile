@@ -2,10 +2,11 @@ CC = gcc
 NVCC = nvcc
 
 CCFLAGS = -Wall
-NVCCFLAGS = -std=c++11 -fmad=false
+NVCCFLAGS = -std=c++11 -fmad=false -arch sm_50
+PTXFLAGS = -warn-double-usage -warn-lmem-usage -warn-spills
 LDFLAGS = -lm
 
-DEBUG ?= 1
+DEBUG ?= 0
 
 ifeq ($(DEBUG),1)
 	CCFLAGS += -Og -g -pg -DSHOW_CYCLES
@@ -16,11 +17,12 @@ endif
 
 ALL_NVCCFLAGS = $(NVCCFLAGS)
 ALL_NVCCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
+ALL_NVCCFLAGS += $(addprefix -Xptxas ,$(PTXFLAGS))
 
 ALL_LDFLAGS = $(addprefix -Xlinker ,$(LDFLAGS))
 
-VIDEO ?= 1
-FRAMES ?= 10
+VIDEO ?= 0
+FRAMES ?= 0
 
 ifeq ($(VIDEO),0)
 	WIDTH = 352
