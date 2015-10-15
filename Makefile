@@ -36,6 +36,12 @@ else ifeq ($(VIDEO),1)
 	INPUT_VIDEO = /opt/cipr/foreman_4k.yuv
 	OUTPUT_VIDEO = ~/yuv/test/foreman_4k.yuv
 	REFERENCE_VIDEO = ~/yuv/reference/foreman_4k.yuv
+else ifeq ($(VIDEO),2)
+	WIDTH = 1920
+	HEIGHT = 1080
+	INPUT_VIDEO = /opt/cipr/tractor.yuv
+	OUTPUT_VIDEO = ~/yuv/test/tractor.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/tractor.yuv
 endif
 
 all: c63enc #c63dec c63pred
