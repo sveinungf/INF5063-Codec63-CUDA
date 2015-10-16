@@ -27,9 +27,9 @@ FRAMES ?= 0
 ifeq ($(VIDEO),0)
 	WIDTH = 352
 	HEIGHT = 288
-	INPUT_VIDEO = yuv/foreman.yuv
-	OUTPUT_VIDEO = yuv/test.yuv
-	REFERENCE_VIDEO = yuv/reference.yuv
+	INPUT_VIDEO = /opt/cipr/foreman.yuv
+	OUTPUT_VIDEO = ~/yuv/test/foreman.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/foreman.yuv
 else ifeq ($(VIDEO),1)
 	WIDTH = 3840
 	HEIGHT = 2160
