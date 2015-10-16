@@ -121,7 +121,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t* image_gpu)
 	dct_t* residuals = cm->curframe->residuals_gpu;
 
 	const dim3 threadsPerBlock(8, 8);
-	const dim3 threadsPerBlock2(16, 16);
 
 	const dim3 numBlocks_Y(cm->padw[Y_COMPONENT]/threadsPerBlock.x, cm->padh[Y_COMPONENT]/threadsPerBlock.y);
 	const dim3 numBlocks_UV(cm->padw[U_COMPONENT]/threadsPerBlock.x, cm->padh[U_COMPONENT]/threadsPerBlock.y);
