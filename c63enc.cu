@@ -21,6 +21,8 @@ extern "C" {
 #include "init_cuda.h"
 #include "me.h"
 
+using namespace c63::gpu;
+
 static char *output_file, *input_file;
 FILE *outfile;
 
@@ -111,10 +113,14 @@ static void c63_encode_image(struct c63_common *cm, struct c63_common_gpu& cm_gp
 	if (!cm->curframe->keyframe)
 	{
 		/* Motion Estimation */
-		c63_motion_estimate(cm, cm_gpu, c63_cuda);
+		c63_motion_estimate<Y>(cm, cm_gpu, c63_cuda);
+		c63_motion_estimate<U>(cm, cm_gpu, c63_cuda);
+		c63_motion_estimate<V>(cm, cm_gpu, c63_cuda);
 
 		/* Motion Compensation */
-		c63_motion_compensate(cm, c63_cuda);
+		c63_motion_compensate<Y>(cm, c63_cuda);
+		c63_motion_compensate<U>(cm, c63_cuda);
+		c63_motion_compensate<V>(cm, c63_cuda);
 	}
 	else
 	{
@@ -281,6 +287,9 @@ int main(int argc, char **argv)
 			std::swap(cm->curframe->recons_gpu, cm2->curframe->recons_gpu);
 
 			// Wait until the previous image has been encoded
+			cudaStreamSynchronize(c63_cuda.memcpy_stream[Y]);
+			cudaStreamSynchronize(c63_cuda.memcpy_stream[U]);
+			cudaStreamSynchronize(c63_cuda.memcpy_stream[V]);
 			cudaStreamSynchronize(c63_cuda.stream[Y]);
 			cudaStreamSynchronize(c63_cuda.stream[U]);
 			cudaStreamSynchronize(c63_cuda.stream[V]);
@@ -307,6 +316,9 @@ int main(int argc, char **argv)
 		}
 
 		// Wait until the last image has been encoded
+		cudaStreamSynchronize(c63_cuda.memcpy_stream[Y]);
+		cudaStreamSynchronize(c63_cuda.memcpy_stream[U]);
+		cudaStreamSynchronize(c63_cuda.memcpy_stream[V]);
 		cudaStreamSynchronize(c63_cuda.stream[Y]);
 		cudaStreamSynchronize(c63_cuda.stream[U]);
 		cudaStreamSynchronize(c63_cuda.stream[V]);

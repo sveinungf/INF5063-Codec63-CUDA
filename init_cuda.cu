@@ -7,6 +7,10 @@ struct c63_cuda init_c63_cuda()
 	for (int c = 0; c < COLOR_COMPONENTS; ++c)
 	{
 		cudaStreamCreate(&result.stream[c]);
+		cudaStreamCreate(&result.memcpy_stream[c]);
+
+		cudaEventCreate(&result.me_done[c]);
+		cudaEventCreate(&result.dctquant_done[c]);
 	}
 
 	return result;
@@ -17,6 +21,10 @@ void cleanup_c63_cuda(struct c63_cuda& c63_cuda)
 	for (int c = 0; c < COLOR_COMPONENTS; ++c)
 	{
 		cudaStreamDestroy(c63_cuda.stream[c]);
+		cudaStreamDestroy(c63_cuda.memcpy_stream[c]);
+
+		cudaEventDestroy(c63_cuda.me_done[c]);
+		cudaEventDestroy(c63_cuda.dctquant_done[c]);
 	}
 }
 
