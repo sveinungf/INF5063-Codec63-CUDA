@@ -9,7 +9,7 @@ static const int Y = Y_COMPONENT;
 static const int U = U_COMPONENT;
 static const int V = V_COMPONENT;
 
-struct c63_common* init_c63_enc(int width, int height, const struct c63_cuda& c63_cuda)
+struct c63_common* init_c63_common(int width, int height, const struct c63_cuda& c63_cuda)
 {
 	/* calloc() sets allocated memory to zero */
 	struct c63_common *cm = (c63_common*) calloc(1, sizeof(struct c63_common));
@@ -53,7 +53,7 @@ struct c63_common* init_c63_enc(int width, int height, const struct c63_cuda& c6
 	return cm;
 }
 
-void free_c63_enc(struct c63_common* cm)
+void cleanup_c63_common(struct c63_common* cm)
 {
 	destroy_frame(cm->curframe);
 	destroy_frame(cm->refframe);

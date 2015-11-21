@@ -340,10 +340,10 @@ int main(int argc, char **argv)
 
 	struct c63_cuda c63_cuda = init_c63_cuda();
 
-	struct c63_common *cm = init_c63_enc(width, height, c63_cuda);
+	struct c63_common *cm = init_c63_common(width, height, c63_cuda);
 	cm->e_ctx.fp = outfile;
 
-	struct c63_common *cm2 = init_c63_enc(width, height, c63_cuda);
+	struct c63_common *cm2 = init_c63_common(width, height, c63_cuda);
 	cm2->e_ctx.fp = outfile;
 
 	struct c63_common_gpu cm_gpu = init_c63_gpu(cm, c63_cuda);
@@ -435,8 +435,8 @@ int main(int argc, char **argv)
 	destroy_image(image);
 	destroy_image_gpu(image_gpu);
 
-	free_c63_enc(cm);
-	free_c63_enc(cm2);
+	cleanup_c63_common(cm);
+	cleanup_c63_common(cm2);
 
 	deinit_boundaries(cm_gpu);
 	cleanup_c63_gpu(cm_gpu);
