@@ -124,7 +124,7 @@ struct c63_common {
 
 	struct entropy_ctx e_ctx;
 
-	//struct boundaries me_boundaries[COLOR_COMPONENTS];
+	struct boundaries me_boundaries[COLOR_COMPONENTS];
 };
 
 #endif  /* C63_C63_H_ */
