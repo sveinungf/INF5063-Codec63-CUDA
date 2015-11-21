@@ -228,13 +228,13 @@ static void init_boundaries(c63_common* cm)
 		}
 	}
 
-	struct boundaries* boundY = &cm->me_boundariesY;
+	struct boundaries* boundY = &cm->me_boundaries[Y];
 	cudaMalloc((void**) &boundY->left, cm->mb_cols[Y] * sizeof(int));
 	cudaMalloc((void**) &boundY->right, cm->mb_cols[Y] * sizeof(int));
 	cudaMalloc((void**) &boundY->top, cm->mb_rows[Y] * sizeof(int));
 	cudaMalloc((void**) &boundY->bottom, cm->mb_rows[Y] * sizeof(int));
 
-	struct boundaries* boundUV = &cm->me_boundariesUV;
+	struct boundaries* boundUV = &cm->me_boundaries[U];
 	cudaMalloc((void**) &boundUV->left, cm->mb_cols[U] * sizeof(int));
 	cudaMalloc((void**) &boundUV->right, cm->mb_cols[U] * sizeof(int));
 	cudaMalloc((void**) &boundUV->top, cm->mb_rows[U] * sizeof(int));
@@ -263,15 +263,15 @@ static void init_boundaries(c63_common* cm)
 
 static void deinit_boundaries(c63_common* cm)
 {
-	cudaFree((void*) cm->me_boundariesY.left);
-	cudaFree((void*) cm->me_boundariesY.right);
-	cudaFree((void*) cm->me_boundariesY.top);
-	cudaFree((void*) cm->me_boundariesY.bottom);
+	cudaFree((void*) cm->me_boundaries[Y].left);
+	cudaFree((void*) cm->me_boundaries[Y].right);
+	cudaFree((void*) cm->me_boundaries[Y].top);
+	cudaFree((void*) cm->me_boundaries[Y].bottom);
 
-	cudaFree((void*) cm->me_boundariesUV.left);
-	cudaFree((void*) cm->me_boundariesUV.right);
-	cudaFree((void*) cm->me_boundariesUV.top);
-	cudaFree((void*) cm->me_boundariesUV.bottom);
+	cudaFree((void*) cm->me_boundaries[U].left);
+	cudaFree((void*) cm->me_boundaries[U].right);
+	cudaFree((void*) cm->me_boundaries[U].top);
+	cudaFree((void*) cm->me_boundaries[U].bottom);
 }
 
 static void init_cuda_data(c63_common* cm)
