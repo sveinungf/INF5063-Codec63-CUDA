@@ -90,7 +90,7 @@ static void zero_out_prediction(struct c63_common* cm, const struct c63_cuda& c6
 	cudaMemsetAsync(frame->predicted_gpu->V, 0, cm->vpw * cm->vph * sizeof(uint8_t), c63_cuda.stream[V]);
 }
 
-static void c63_encode_image(struct c63_common *cm, const struct c63_cuda& c63_cuda, yuv_t* image_gpu)
+static void c63_encode_image(struct c63_common *cm, struct c63_common_gpu& cm_gpu, const struct c63_cuda& c63_cuda, yuv_t* image_gpu)
 {
 	// Advance to next frame by swapping current and reference frame
 	std::swap(cm->curframe, cm->refframe);
@@ -110,7 +110,7 @@ static void c63_encode_image(struct c63_common *cm, const struct c63_cuda& c63_c
 	if (!cm->curframe->keyframe)
 	{
 		/* Motion Estimation */
-		c63_motion_estimate(cm, c63_cuda);
+		c63_motion_estimate(cm, cm_gpu, c63_cuda);
 
 		/* Motion Compensation */
 		c63_motion_compensate(cm, c63_cuda);
@@ -275,22 +275,6 @@ static void deinit_boundaries(c63_common* cm)
 	cudaFree((void*) cm->me_boundaries[U].bottom);
 }
 
-static void init_cuda_data(c63_common* cm)
-{
-	cuda_data* cuda_me = &(cm->cuda_data);
-
-	cudaMalloc((void**) &cuda_me->sad_index_resultsY, cm->mb_cols[Y]*cm->mb_rows[Y]*sizeof(unsigned int));
-	cudaMalloc((void**) &cuda_me->sad_index_resultsU, cm->mb_cols[U]*cm->mb_rows[U]*sizeof(unsigned int));
-	cudaMalloc((void**) &cuda_me->sad_index_resultsV, cm->mb_cols[U]*cm->mb_rows[U]*sizeof(unsigned int));
-}
-
-static void deinit_cuda_data(c63_common* cm)
-{
-	cudaFree(cm->cuda_data.sad_index_resultsY);
-	cudaFree(cm->cuda_data.sad_index_resultsU);
-	cudaFree(cm->cuda_data.sad_index_resultsV);
-}
-
 static void copy_image_to_gpu(struct c63_common* cm, const struct c63_cuda& c63_cuda, yuv_t* image, yuv_t* image_gpu)
 {
 	cudaMemcpyAsync(image_gpu->Y, image->Y, cm->ypw * cm->yph * sizeof(uint8_t), cudaMemcpyHostToDevice, c63_cuda.stream[Y]);
@@ -338,8 +322,6 @@ struct c63_common* init_c63_enc(int width, int height, const struct c63_cuda& c6
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
   }
 
-  init_cuda_data(cm);
-
   cm->curframe = create_frame(cm, c63_cuda);
   cm->refframe = create_frame(cm, c63_cuda);
 
@@ -354,8 +336,6 @@ void free_c63_enc(struct c63_common* cm)
 
 	destroy_frame(cm->curframe);
 	destroy_frame(cm->refframe);
-
-	deinit_cuda_data(cm);
 
 	free(cm);
 }
@@ -423,6 +403,8 @@ int main(int argc, char **argv)
 	struct c63_common *cm2 = init_c63_enc(width, height, c63_cuda);
 	cm2->e_ctx.fp = outfile;
 
+	struct c63_common_gpu cm_gpu = init_c63_gpu(cm, c63_cuda);
+
 	input_file = argv[optind];
 
 	if (limit_numframes) { printf("Limited to %d frames.\n", limit_numframes); }
@@ -452,7 +434,7 @@ int main(int argc, char **argv)
 		++numframes;
 
 		// Start encoding the first image asynchronously
-		c63_encode_image(cm, c63_cuda, image_gpu);
+		c63_encode_image(cm, cm_gpu, c63_cuda, image_gpu);
 		++cm->framenum;
 		++cm->frames_since_keyframe;
 		++cm2->framenum;
@@ -483,7 +465,7 @@ int main(int argc, char **argv)
 			++numframes;
 
 			// Start encoding the current image asynchronously
-			c63_encode_image(cm2, c63_cuda, image_gpu);
+			c63_encode_image(cm2, cm_gpu, c63_cuda, image_gpu);
 			++cm->framenum;
 			++cm->frames_since_keyframe;
 			++cm2->framenum;

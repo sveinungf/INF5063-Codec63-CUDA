@@ -98,12 +98,6 @@ struct boundaries {
 	const int* __restrict__ bottom;
 };
 
-struct cuda_data {
-	unsigned int* sad_index_resultsY;
-	unsigned int* sad_index_resultsU;
-	unsigned int* sad_index_resultsV;
-};
-
 struct c63_common {
 	int width, height;
 	int ypw, yph, upw, uph, vpw, vph;
@@ -131,8 +125,6 @@ struct c63_common {
 	struct entropy_ctx e_ctx;
 
 	struct boundaries me_boundaries[COLOR_COMPONENTS];
-
-	struct cuda_data cuda_data;
 };
 
 #endif  /* C63_C63_H_ */
