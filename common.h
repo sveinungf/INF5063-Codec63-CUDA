@@ -4,6 +4,7 @@
 #include <inttypes.h>
 
 #include "c63.h"
+#include "c63_cuda.h"
 
 __constant__ uint8_t quant_table[192] =
 {
@@ -77,7 +78,7 @@ __constant__ uint8_t UV_indexes[64] =
 };
 
 // Declarations
-struct frame* create_frame(struct c63_common *cm);
+struct frame* create_frame(struct c63_common *cm, const struct c63_cuda& c63_cuda);
 
 yuv_t* create_image(struct c63_common *cm);
 

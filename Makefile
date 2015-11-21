@@ -55,7 +55,7 @@ all: c63enc
 %.o: %.cu
 	$(NVCC) $(ALL_NVCCFLAGS) -c $< -o $@
 	
-ALL_OBJECTS = c63_write.o c63enc.o common.o dsp.o io.o me.o tables.o
+ALL_OBJECTS = c63_write.o c63enc.o common.o dsp.o init_cuda.o io.o me.o tables.o
 
 c63enc: $(ALL_OBJECTS)
 	$(NVCC) $(ALL_NVCCFLAGS) $(ALL_LDFLAGS) -o $@ $^

@@ -99,10 +99,6 @@ struct boundaries {
 };
 
 struct cuda_data {
-	cudaStream_t streamY;
-	cudaStream_t streamU;
-	cudaStream_t streamV;
-
 	unsigned int* sad_index_resultsY;
 	unsigned int* sad_index_resultsU;
 	unsigned int* sad_index_resultsV;

@@ -12,6 +12,7 @@
 
 static const int Y = Y_COMPONENT;
 static const int U = U_COMPONENT;
+static const int V = V_COMPONENT;
 
 __device__
 static void dct_quant_block_8x8(float* in_data, float *out_data, int16_t __restrict__ *global_out, const uint8_t* __restrict__ quant_tbl, int i, const int j)
@@ -178,7 +179,7 @@ struct macroblock *create_mb(struct macroblock *mb, size_t size, const cudaStrea
 	return mb;
 }
 
-struct frame* create_frame(struct c63_common *cm)
+struct frame* create_frame(struct c63_common *cm, const struct c63_cuda& c63_cuda)
 {
 	struct frame *f = (frame*) malloc(sizeof(struct frame));
 
@@ -189,9 +190,9 @@ struct frame* create_frame(struct c63_common *cm)
 
 	size_t sizeY = cm->mb_rows[Y] * cm->mb_cols[Y] * sizeof(struct macroblock);
 	size_t sizeUV = cm->mb_rows[U] * cm->mb_cols[U] * sizeof(struct macroblock);
-	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], sizeY, cm->cuda_data.streamY);
-	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], sizeUV, cm->cuda_data.streamU);
-	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], sizeUV, cm->cuda_data.streamV);
+	f->mbs[Y_COMPONENT] = create_mb(f->mbs[Y_COMPONENT], sizeY, c63_cuda.stream[Y]);
+	f->mbs[U_COMPONENT] = create_mb(f->mbs[U_COMPONENT], sizeUV, c63_cuda.stream[U]);
+	f->mbs[V_COMPONENT] = create_mb(f->mbs[V_COMPONENT], sizeUV, c63_cuda.stream[V]);
 
 	init_frame_gpu(cm, f);
 
