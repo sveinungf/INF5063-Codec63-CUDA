@@ -160,7 +160,7 @@ static void c63_encode_image(struct c63_common *cm, struct c63_common_gpu& cm_gp
      prediction is correct */
 }
 
-static void init_boundaries(struct c63_common* cm, const struct c63_cuda& c63_cuda)
+static void init_boundaries(struct c63_common* cm, struct c63_common_gpu& cm_gpu, const struct c63_cuda& c63_cuda)
 {
 	int hY = cm->padh[Y_COMPONENT];
 	int hUV = cm->padh[U_COMPONENT];
@@ -229,13 +229,13 @@ static void init_boundaries(struct c63_common* cm, const struct c63_cuda& c63_cu
 		}
 	}
 
-	struct boundaries* boundY = &cm->me_boundaries[Y];
+	struct boundaries* boundY = &cm_gpu.me_boundaries[Y];
 	cudaMalloc((void**) &boundY->left, cm->mb_cols[Y] * sizeof(int));
 	cudaMalloc((void**) &boundY->right, cm->mb_cols[Y] * sizeof(int));
 	cudaMalloc((void**) &boundY->top, cm->mb_rows[Y] * sizeof(int));
 	cudaMalloc((void**) &boundY->bottom, cm->mb_rows[Y] * sizeof(int));
 
-	struct boundaries* boundUV = &cm->me_boundaries[U];
+	struct boundaries* boundUV = &cm_gpu.me_boundaries[U];
 	cudaMalloc((void**) &boundUV->left, cm->mb_cols[U] * sizeof(int));
 	cudaMalloc((void**) &boundUV->right, cm->mb_cols[U] * sizeof(int));
 	cudaMalloc((void**) &boundUV->top, cm->mb_rows[U] * sizeof(int));
@@ -262,17 +262,17 @@ static void init_boundaries(struct c63_common* cm, const struct c63_cuda& c63_cu
 	delete[] bottomsUV;
 }
 
-static void deinit_boundaries(c63_common* cm)
+static void deinit_boundaries(struct c63_common_gpu& cm_gpu)
 {
-	cudaFree((void*) cm->me_boundaries[Y].left);
-	cudaFree((void*) cm->me_boundaries[Y].right);
-	cudaFree((void*) cm->me_boundaries[Y].top);
-	cudaFree((void*) cm->me_boundaries[Y].bottom);
+	cudaFree((void*) cm_gpu.me_boundaries[Y].left);
+	cudaFree((void*) cm_gpu.me_boundaries[Y].right);
+	cudaFree((void*) cm_gpu.me_boundaries[Y].top);
+	cudaFree((void*) cm_gpu.me_boundaries[Y].bottom);
 
-	cudaFree((void*) cm->me_boundaries[U].left);
-	cudaFree((void*) cm->me_boundaries[U].right);
-	cudaFree((void*) cm->me_boundaries[U].top);
-	cudaFree((void*) cm->me_boundaries[U].bottom);
+	cudaFree((void*) cm_gpu.me_boundaries[U].left);
+	cudaFree((void*) cm_gpu.me_boundaries[U].right);
+	cudaFree((void*) cm_gpu.me_boundaries[U].top);
+	cudaFree((void*) cm_gpu.me_boundaries[U].bottom);
 }
 
 static void copy_image_to_gpu(struct c63_common* cm, const struct c63_cuda& c63_cuda, yuv_t* image, yuv_t* image_gpu)
@@ -325,15 +325,11 @@ struct c63_common* init_c63_enc(int width, int height, const struct c63_cuda& c6
   cm->curframe = create_frame(cm, c63_cuda);
   cm->refframe = create_frame(cm, c63_cuda);
 
-  init_boundaries(cm, c63_cuda);
-
   return cm;
 }
 
 void free_c63_enc(struct c63_common* cm)
 {
-	deinit_boundaries(cm);
-
 	destroy_frame(cm->curframe);
 	destroy_frame(cm->refframe);
 
@@ -404,6 +400,7 @@ int main(int argc, char **argv)
 	cm2->e_ctx.fp = outfile;
 
 	struct c63_common_gpu cm_gpu = init_c63_gpu(cm, c63_cuda);
+	init_boundaries(cm, cm_gpu, c63_cuda);
 
 	input_file = argv[optind];
 
@@ -493,6 +490,9 @@ int main(int argc, char **argv)
 
 	free_c63_enc(cm);
 	free_c63_enc(cm2);
+
+	deinit_boundaries(cm_gpu);
+	cleanup_c63_gpu(cm_gpu);
 
 	cleanup_c63_cuda(c63_cuda);
 
