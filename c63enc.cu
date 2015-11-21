@@ -186,8 +186,8 @@ static void init_boundaries(c63_common* cm)
 	}
 
 	for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x) {
-		leftsUV[mb_x] = mb_x * 8 - ME_RANGE_UV;
-		rightsUV[mb_x] = mb_x * 8 + ME_RANGE_UV;
+		leftsUV[mb_x] = mb_x * 8 - ME_RANGE_U;
+		rightsUV[mb_x] = mb_x * 8 + ME_RANGE_U;
 
 		if (leftsUV[mb_x] < 0) {
 			leftsUV[mb_x] = 0;
@@ -212,8 +212,8 @@ static void init_boundaries(c63_common* cm)
 	}
 
 	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y) {
-		topsUV[mb_y] = mb_y * 8 - ME_RANGE_UV;
-		bottomsUV[mb_y] = mb_y * 8 + ME_RANGE_UV;
+		topsUV[mb_y] = mb_y * 8 - ME_RANGE_U;
+		bottomsUV[mb_y] = mb_y * 8 + ME_RANGE_U;
 
 		if (topsUV[mb_y] < 0) {
 			topsUV[mb_y] = 0;

@@ -342,16 +342,16 @@ void c63_motion_estimate(struct c63_common *cm)
 
 	/* Chroma */
 	dim3 numBlocksUV(cm->mb_colsUV, cm->mb_rowsUV);
-	dim3 threadsPerBlockUV(ME_RANGE_UV*2, ME_RANGE_UV*2);
+	dim3 threadsPerBlockUV(ME_RANGE_U*2, ME_RANGE_U*2);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsU, 255, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int), cm->cuda_data.streamU);
-	me_block_8x8_gpu_UV<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamU>>>(orig->U, ref->U, boundUV->left, boundUV->right, boundUV->top, boundUV->bottom, wU, cm->cuda_data.sad_index_resultsU);
-	set_motion_vectors<ME_RANGE_UV><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], boundUV->left, boundUV->top, cm->cuda_data.sad_index_resultsU);
+	me_block_8x8_gpu_UV<ME_RANGE_U><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamU>>>(orig->U, ref->U, boundUV->left, boundUV->right, boundUV->top, boundUV->bottom, wU, cm->cuda_data.sad_index_resultsU);
+	set_motion_vectors<ME_RANGE_U><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamU>>>(mbs[U_COMPONENT], boundUV->left, boundUV->top, cm->cuda_data.sad_index_resultsU);
 	cudaMemcpyAsync(cm->curframe->mbs[U_COMPONENT], mbs[U_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamU);
 
 	cudaMemsetAsync(cm->cuda_data.sad_index_resultsV, 255, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int), cm->cuda_data.streamV);
-	me_block_8x8_gpu_UV<ME_RANGE_UV><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamV>>>(orig->V, ref->V, boundUV->left, boundUV->right, boundUV->top, boundUV->bottom, wV, cm->cuda_data.sad_index_resultsV);
-	set_motion_vectors<ME_RANGE_UV><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], boundUV->left, boundUV->top, cm->cuda_data.sad_index_resultsV);
+	me_block_8x8_gpu_UV<ME_RANGE_U><<<numBlocksUV, threadsPerBlockUV, 0, cm->cuda_data.streamV>>>(orig->V, ref->V, boundUV->left, boundUV->right, boundUV->top, boundUV->bottom, wV, cm->cuda_data.sad_index_resultsV);
+	set_motion_vectors<ME_RANGE_U><<<cm->mb_colsUV, cm->mb_rowsUV, 0, cm->cuda_data.streamV>>>(mbs[V_COMPONENT], boundUV->left, boundUV->top, cm->cuda_data.sad_index_resultsV);
 	cudaMemcpyAsync(cm->curframe->mbs[V_COMPONENT], mbs[V_COMPONENT], cm->mb_rowsUV * cm->mb_colsUV * sizeof(struct macroblock), cudaMemcpyDeviceToHost, cm->cuda_data.streamV);
 }
 
