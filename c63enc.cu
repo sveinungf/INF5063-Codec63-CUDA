@@ -27,6 +27,10 @@ static int limit_numframes = 0;
 static uint32_t width;
 static uint32_t height;
 
+static const int Y = Y_COMPONENT;
+static const int U = U_COMPONENT;
+static const int V = V_COMPONENT;
+
 /* getopt */
 extern int optind;
 extern char *optarg;
@@ -163,16 +167,16 @@ static void init_boundaries(c63_common* cm)
 	int wY = cm->padw[Y_COMPONENT];
 	int wUV = cm->padw[U_COMPONENT];
 
-	int* leftsY = new int[cm->mb_colsY];
-	int* leftsUV = new int[cm->mb_colsUV];
-	int* rightsY = new int[cm->mb_colsY];
-	int* rightsUV = new int[cm->mb_colsUV];
-	int* topsY = new int[cm->mb_rowsY];
-	int* topsUV = new int[cm->mb_rowsUV];
-	int* bottomsY = new int[cm->mb_rowsY];
-	int* bottomsUV = new int[cm->mb_rowsUV];
+	int* leftsY = new int[cm->mb_cols[Y]];
+	int* leftsUV = new int[cm->mb_cols[U]];
+	int* rightsY = new int[cm->mb_cols[Y]];
+	int* rightsUV = new int[cm->mb_cols[U]];
+	int* topsY = new int[cm->mb_rows[Y]];
+	int* topsUV = new int[cm->mb_rows[U]];
+	int* bottomsY = new int[cm->mb_rows[Y]];
+	int* bottomsUV = new int[cm->mb_rows[U]];
 
-	for (int mb_x = 0; mb_x < cm->mb_colsY; ++mb_x) {
+	for (int mb_x = 0; mb_x < cm->mb_cols[Y]; ++mb_x) {
 		leftsY[mb_x] = mb_x * 8 - ME_RANGE_Y;
 		rightsY[mb_x] = mb_x * 8 + ME_RANGE_Y;
 
@@ -185,7 +189,7 @@ static void init_boundaries(c63_common* cm)
 		}
 	}
 
-	for (int mb_x = 0; mb_x < cm->mb_colsUV; ++mb_x) {
+	for (int mb_x = 0; mb_x < cm->mb_cols[U]; ++mb_x) {
 		leftsUV[mb_x] = mb_x * 8 - ME_RANGE_U;
 		rightsUV[mb_x] = mb_x * 8 + ME_RANGE_U;
 
@@ -198,7 +202,7 @@ static void init_boundaries(c63_common* cm)
 		}
 	}
 
-	for (int mb_y = 0; mb_y < cm->mb_rowsY; ++mb_y) {
+	for (int mb_y = 0; mb_y < cm->mb_rows[Y]; ++mb_y) {
 		topsY[mb_y] = mb_y * 8 - ME_RANGE_Y;
 		bottomsY[mb_y] = mb_y * 8 + ME_RANGE_Y;
 
@@ -211,7 +215,7 @@ static void init_boundaries(c63_common* cm)
 		}
 	}
 
-	for (int mb_y = 0; mb_y < cm->mb_rowsUV; ++mb_y) {
+	for (int mb_y = 0; mb_y < cm->mb_rows[U]; ++mb_y) {
 		topsUV[mb_y] = mb_y * 8 - ME_RANGE_U;
 		bottomsUV[mb_y] = mb_y * 8 + ME_RANGE_U;
 
@@ -225,27 +229,27 @@ static void init_boundaries(c63_common* cm)
 	}
 
 	struct boundaries* boundY = &cm->me_boundariesY;
-	cudaMalloc((void**) &boundY->left, cm->mb_colsY * sizeof(int));
-	cudaMalloc((void**) &boundY->right, cm->mb_colsY * sizeof(int));
-	cudaMalloc((void**) &boundY->top, cm->mb_rowsY * sizeof(int));
-	cudaMalloc((void**) &boundY->bottom, cm->mb_rowsY * sizeof(int));
+	cudaMalloc((void**) &boundY->left, cm->mb_cols[Y] * sizeof(int));
+	cudaMalloc((void**) &boundY->right, cm->mb_cols[Y] * sizeof(int));
+	cudaMalloc((void**) &boundY->top, cm->mb_rows[Y] * sizeof(int));
+	cudaMalloc((void**) &boundY->bottom, cm->mb_rows[Y] * sizeof(int));
 
 	struct boundaries* boundUV = &cm->me_boundariesUV;
-	cudaMalloc((void**) &boundUV->left, cm->mb_colsUV * sizeof(int));
-	cudaMalloc((void**) &boundUV->right, cm->mb_colsUV * sizeof(int));
-	cudaMalloc((void**) &boundUV->top, cm->mb_rowsUV * sizeof(int));
-	cudaMalloc((void**) &boundUV->bottom, cm->mb_rowsUV * sizeof(int));
+	cudaMalloc((void**) &boundUV->left, cm->mb_cols[U] * sizeof(int));
+	cudaMalloc((void**) &boundUV->right, cm->mb_cols[U] * sizeof(int));
+	cudaMalloc((void**) &boundUV->top, cm->mb_rows[U] * sizeof(int));
+	cudaMalloc((void**) &boundUV->bottom, cm->mb_rows[U] * sizeof(int));
 
 	const cudaStream_t& streamY = cm->cuda_data.streamY;
-	cudaMemcpyAsync((void*) boundY->left, leftsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
-	cudaMemcpyAsync((void*) boundY->right, rightsY, cm->mb_colsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
-	cudaMemcpyAsync((void*) boundY->top, topsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
-	cudaMemcpyAsync((void*) boundY->bottom, bottomsY, cm->mb_rowsY * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->left, leftsY, cm->mb_cols[Y] * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->right, rightsY, cm->mb_cols[Y] * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->top, topsY, cm->mb_rows[Y] * sizeof(int), cudaMemcpyHostToDevice, streamY);
+	cudaMemcpyAsync((void*) boundY->bottom, bottomsY, cm->mb_rows[Y] * sizeof(int), cudaMemcpyHostToDevice, streamY);
 
-	cudaMemcpy((void*) boundUV->left, leftsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*) boundUV->right, rightsUV, cm->mb_colsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*) boundUV->top, topsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*) boundUV->bottom, bottomsUV, cm->mb_rowsUV * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->left, leftsUV, cm->mb_cols[U] * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->right, rightsUV, cm->mb_cols[U] * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->top, topsUV, cm->mb_rows[U] * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy((void*) boundUV->bottom, bottomsUV, cm->mb_rows[U] * sizeof(int), cudaMemcpyHostToDevice);
 
 	delete[] leftsY;
 	delete[] leftsUV;
@@ -278,9 +282,9 @@ static void init_cuda_data(c63_common* cm)
 	cudaStreamCreate(&cuda_me->streamU);
 	cudaStreamCreate(&cuda_me->streamV);
 
-	cudaMalloc((void**) &cuda_me->sad_index_resultsY, cm->mb_colsY*cm->mb_rowsY*sizeof(unsigned int));
-	cudaMalloc((void**) &cuda_me->sad_index_resultsU, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int));
-	cudaMalloc((void**) &cuda_me->sad_index_resultsV, cm->mb_colsUV*cm->mb_rowsUV*sizeof(unsigned int));
+	cudaMalloc((void**) &cuda_me->sad_index_resultsY, cm->mb_cols[Y]*cm->mb_rows[Y]*sizeof(unsigned int));
+	cudaMalloc((void**) &cuda_me->sad_index_resultsU, cm->mb_cols[U]*cm->mb_rows[U]*sizeof(unsigned int));
+	cudaMalloc((void**) &cuda_me->sad_index_resultsV, cm->mb_cols[U]*cm->mb_rows[U]*sizeof(unsigned int));
 }
 
 static void deinit_cuda_data(c63_common* cm)
@@ -318,10 +322,13 @@ struct c63_common* init_c63_enc(int width, int height)
   cm->padw[V_COMPONENT] = cm->vpw = (uint32_t)(ceil(width*VX/(YX*8.0f))*8);
   cm->padh[V_COMPONENT] = cm->vph = (uint32_t)(ceil(height*VY/(YY*8.0f))*8);
 
-  cm->mb_colsY = cm->ypw / 8;
-  cm->mb_rowsY = cm->yph / 8;
-  cm->mb_colsUV = cm->mb_colsY / 2;
-  cm->mb_rowsUV = cm->mb_rowsY / 2;
+  cm->mb_cols[Y] = cm->ypw / 8;
+  cm->mb_cols[U] = cm->mb_cols[Y] / 2;
+  cm->mb_cols[V] = cm->mb_cols[U];
+
+  cm->mb_rows[Y] = cm->yph / 8;
+  cm->mb_rows[U] = cm->mb_rows[Y] / 2;
+  cm->mb_rows[V] = cm->mb_rows[U];
 
   /* Quality parameters -- Home exam deliveries should have original values,
    i.e., quantization factor should be 25, search range should be 16, and the
