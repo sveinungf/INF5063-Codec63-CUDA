@@ -76,11 +76,14 @@ gprof:
 nvprof:
 	nvprof ./c63enc -w $(WIDTH) -h $(HEIGHT) -f $(FRAMES) -o $(C63_FILE) $(INPUT_VIDEO)
 
+PSNR_EXEC = ./tools/libyuv-tools-r634-linux-x86_64/bin/psnr
+
 psnr:
-	./tools/yuv-tools/ycbcr.py psnr $(INPUT_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(OUTPUT_VIDEO)
+	$(PSNR_EXEC) -s $(WIDTH) $(HEIGHT) -v $(INPUT_VIDEO) $(OUTPUT_VIDEO)
 psnr-reference:
-	./tools/yuv-tools/ycbcr.py psnr $(INPUT_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(REFERENCE_VIDEO)
+	$(PSNR_EXEC) -s $(WIDTH) $(HEIGHT) -v $(INPUT_VIDEO) $(REFERENCE_VIDEO)
 psnr-diff:
-	./tools/yuv-tools/ycbcr.py psnr $(REFERENCE_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(OUTPUT_VIDEO)
+	$(PSNR_EXEC) -s $(WIDTH) $(HEIGHT) -v $(REFERENCE_VIDEO) $(OUTPUT_VIDEO)
+	
 cmp:
 	@cmp --silent -n "$$(wc -c < $(OUTPUT_VIDEO))" $(OUTPUT_VIDEO) $(REFERENCE_VIDEO) && echo "test == reference :D" || echo "test != reference :("
