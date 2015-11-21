@@ -80,11 +80,11 @@ __constant__ uint8_t UV_indexes[64] =
 	53, 60, 61, 54, 47, 55, 62, 63,
 };
 
-__global__
-void dct_quantize(const uint8_t* __restrict__ in_data, const uint8_t* __restrict__ prediction, int w, int16_t* __restrict__ out_data, int quantization);
+template<int component>
+void dct_quantize(struct c63_common* cm, const struct c63_cuda& c63_cuda);
 
-__global__
-void dequantize_idct(const int16_t* __restrict__ in_data, const uint8_t* __restrict__ prediction, int w, uint8_t* __restrict__ out_data, int quantization);
+template<int component>
+void dequantize_idct(struct c63_common* cm, const struct c63_cuda& c63_cuda);
 
 }
 }

@@ -7,10 +7,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "c63_cuda.h"
 #include "dsp.h"
 
 namespace gpu = c63::gpu;
 using namespace gpu;
+
+static const int Y = Y_COMPONENT;
+static const int U = U_COMPONENT;
+static const int V = V_COMPONENT;
 
 __device__
 static void dct_quant_block_8x8(float* in_data, float *out_data, int16_t __restrict__ *global_out,
@@ -53,8 +58,9 @@ static void dct_quant_block_8x8(float* in_data, float *out_data, int16_t __restr
 }
 
 __global__
-void gpu::dct_quantize(const uint8_t* __restrict__ in_data, const uint8_t* __restrict__ prediction,
-		int w, int16_t* __restrict__ out_data, int quantization)
+static void dct_quantize_gpu(const uint8_t* __restrict__ in_data,
+		const uint8_t* __restrict__ prediction, int w, int16_t* __restrict__ out_data,
+		int quantization)
 {
 	const int block_offset = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x * blockDim.y;
 
@@ -116,7 +122,7 @@ static void dequant_idct_block_8x8(float *in_data, float *out_data,
 }
 
 __global__
-void gpu::dequantize_idct(const int16_t* __restrict__ in_data,
+static void dequantize_idct_gpu(const int16_t* __restrict__ in_data,
 		const uint8_t* __restrict__ prediction, int w, uint8_t* __restrict__ out_data,
 		int quantization)
 {
@@ -148,3 +154,101 @@ void gpu::dequantize_idct(const int16_t* __restrict__ in_data,
 
 	out_data[offset] = tmp;
 }
+
+template<int component>
+void gpu::dct_quantize(struct c63_common* cm, const struct c63_cuda& c63_cuda)
+{
+	const int w = cm->padw[component];
+	const int h = cm->padh[component];
+	const cudaStream_t stream = c63_cuda.stream[component];
+
+	uint8_t* orig;
+	uint8_t* predicted;
+	int16_t* residuals;
+	int16_t* residuals_host;
+
+	struct frame* f = cm->curframe;
+
+	switch (component)
+	{
+		case Y_COMPONENT:
+			orig = (uint8_t*) f->orig_gpu->Y;
+			predicted = f->predicted_gpu->Y;
+			residuals = f->residuals_gpu->Ydct;
+			residuals_host = f->residuals->Ydct;
+			break;
+		case U_COMPONENT:
+			orig = (uint8_t*) f->orig_gpu->U;
+			predicted = f->predicted_gpu->U;
+			residuals = f->residuals_gpu->Udct;
+			residuals_host = f->residuals->Udct;
+			break;
+		case V_COMPONENT:
+			orig = (uint8_t*) f->orig_gpu->V;
+			predicted = f->predicted_gpu->V;
+			residuals = f->residuals_gpu->Vdct;
+			residuals_host = f->residuals->Vdct;
+			break;
+	}
+
+	const dim3 threadsPerBlock(8, 8);
+	const dim3 numBlocks(w / threadsPerBlock.x, h / threadsPerBlock.y);
+
+	dct_quantize_gpu<<<numBlocks, threadsPerBlock, 0, stream>>>(orig, predicted, w, residuals,
+			component);
+
+	cudaEvent_t dctquant_done = c63_cuda.dctquant_done[component];
+	cudaEventRecord(dctquant_done, stream);
+
+	cudaStream_t memcpy_stream = c63_cuda.memcpy_stream[component];
+	cudaStreamWaitEvent(memcpy_stream, dctquant_done, 0);
+	cudaMemcpyAsync(residuals_host, residuals, w * h * sizeof(int16_t), cudaMemcpyDeviceToHost,
+			memcpy_stream);
+}
+
+template<int component>
+void gpu::dequantize_idct(struct c63_common* cm, const struct c63_cuda& c63_cuda)
+{
+	const int w = cm->padw[component];
+	const int h = cm->padh[component];
+	const cudaStream_t stream = c63_cuda.stream[component];
+
+	uint8_t* predicted;
+	uint8_t* recons;
+	int16_t* residuals;
+
+	struct frame* f = cm->curframe;
+
+	switch (component)
+	{
+		case Y_COMPONENT:
+			predicted = f->predicted_gpu->Y;
+			recons = f->recons_gpu->Y;
+			residuals = f->residuals_gpu->Ydct;
+			break;
+		case U_COMPONENT:
+			predicted = f->predicted_gpu->U;
+			recons = f->recons_gpu->U;
+			residuals = f->residuals_gpu->Udct;
+			break;
+		case V_COMPONENT:
+			predicted = f->predicted_gpu->V;
+			recons = f->recons_gpu->V;
+			residuals = f->residuals_gpu->Vdct;
+			break;
+	}
+
+	const dim3 threadsPerBlock(8, 8);
+	const dim3 numBlocks(w / threadsPerBlock.x, h / threadsPerBlock.y);
+
+	dequantize_idct_gpu<<<numBlocks, threadsPerBlock, 0, stream>>>(residuals, predicted, w, recons,
+			component);
+}
+
+template void gpu::dct_quantize<Y>(struct c63_common* cm, const struct c63_cuda& c63_cuda);
+template void gpu::dct_quantize<U>(struct c63_common* cm, const struct c63_cuda& c63_cuda);
+template void gpu::dct_quantize<V>(struct c63_common* cm, const struct c63_cuda& c63_cuda);
+
+template void gpu::dequantize_idct<Y>(struct c63_common* cm, const struct c63_cuda& c63_cuda);
+template void gpu::dequantize_idct<U>(struct c63_common* cm, const struct c63_cuda& c63_cuda);
+template void gpu::dequantize_idct<V>(struct c63_common* cm, const struct c63_cuda& c63_cuda);
