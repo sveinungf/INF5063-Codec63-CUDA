@@ -267,6 +267,11 @@ int main(int argc, char **argv)
 		printf("Encoding frame %d, ", numframes);
 		++numframes;
 
+		// The first frame must be copied to the GPU before the next frame can be read
+		cudaStreamSynchronize(c63_cuda.stream[Y]);
+		cudaStreamSynchronize(c63_cuda.stream[U]);
+		cudaStreamSynchronize(c63_cuda.stream[V]);
+
 		// Start encoding the first image asynchronously
 		c63_encode_image(cm, cm_gpu, c63_cuda, image_gpu);
 		++cm->framenum;
