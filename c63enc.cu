@@ -499,7 +499,5 @@ int main(int argc, char **argv)
 	fclose(outfile);
 	fclose(infile);
 
-	cudaDeviceReset();
-
 	return EXIT_SUCCESS;
 }
