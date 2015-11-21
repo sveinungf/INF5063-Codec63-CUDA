@@ -51,61 +51,54 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-struct yuv
-{
-  uint8_t *Y;
-  uint8_t *U;
-  uint8_t *V;
+struct yuv {
+	uint8_t *Y;
+	uint8_t *U;
+	uint8_t *V;
 };
 
-struct dct
-{
-  int16_t *Ydct;
-  int16_t *Udct;
-  int16_t *Vdct;
+struct dct {
+	int16_t *Ydct;
+	int16_t *Udct;
+	int16_t *Vdct;
 };
 
 typedef struct yuv yuv_t;
 typedef struct dct dct_t;
 
-struct entropy_ctx
-{
-  FILE *fp;
-  unsigned int bit_buffer;
-  unsigned int bit_buffer_width;
+struct entropy_ctx {
+	FILE *fp;
+	unsigned int bit_buffer;
+	unsigned int bit_buffer_width;
 };
 
-struct macroblock
-{
-  int use_mv;
-  int8_t mv_x, mv_y;
+struct macroblock {
+	int use_mv;
+	int8_t mv_x, mv_y;
 };
 
-struct frame
-{
-  yuv_t *orig_gpu;			// Original input image
-  yuv_t *recons_gpu;		// Reconstructed image
-  yuv_t *predicted_gpu;		// Predicted frame from intra-prediction
+struct frame {
+	yuv_t *orig_gpu;			// Original input image
+	yuv_t *recons_gpu;		// Reconstructed image
+	yuv_t *predicted_gpu;		// Predicted frame from intra-prediction
 
-  dct_t *residuals;   // Difference between original image and predicted frame
-  dct_t *residuals_gpu;
+	dct_t *residuals;   // Difference between original image and predicted frame
+	dct_t *residuals_gpu;
 
-  struct macroblock *mbs[COLOR_COMPONENTS];
-  struct macroblock *mbs_gpu[COLOR_COMPONENTS];
+	struct macroblock *mbs[COLOR_COMPONENTS];
+	struct macroblock *mbs_gpu[COLOR_COMPONENTS];
 
-  int keyframe;
+	int keyframe;
 };
 
-struct boundaries
-{
+struct boundaries {
 	const int* __restrict__ left;
 	const int* __restrict__ right;
 	const int* __restrict__ top;
 	const int* __restrict__ bottom;
 };
 
-struct cuda_data
-{
+struct cuda_data {
 	cudaStream_t streamY;
 	cudaStream_t streamU;
 	cudaStream_t streamV;
@@ -115,36 +108,35 @@ struct cuda_data
 	unsigned int* sad_index_resultsV;
 };
 
-struct c63_common
-{
-  int width, height;
-  int ypw, yph, upw, uph, vpw, vph;
+struct c63_common {
+	int width, height;
+	int ypw, yph, upw, uph, vpw, vph;
 
-  int padw[COLOR_COMPONENTS], padh[COLOR_COMPONENTS];
+	int padw[COLOR_COMPONENTS], padh[COLOR_COMPONENTS];
 
-  int mb_colsY, mb_rowsY;
-  int mb_colsUV, mb_rowsUV;
+	int mb_colsY, mb_rowsY;
+	int mb_colsUV, mb_rowsUV;
 
-  uint8_t qp;                         // Quality parameter
+	uint8_t qp;                         // Quality parameter
 
-  //int me_search_range;	// This is now defined in c63.h
+	//int me_search_range;	// This is now defined in c63.h
 
-  uint8_t quanttbl[COLOR_COMPONENTS][64];
+	uint8_t quanttbl[COLOR_COMPONENTS][64];
 
-  struct frame *refframe;
-  struct frame *curframe;
+	struct frame *refframe;
+	struct frame *curframe;
 
-  int framenum;
+	int framenum;
 
-  int keyframe_interval;
-  int frames_since_keyframe;
+	int keyframe_interval;
+	int frames_since_keyframe;
 
-  struct entropy_ctx e_ctx;
+	struct entropy_ctx e_ctx;
 
-  struct boundaries me_boundariesY;
-  struct boundaries me_boundariesUV;
+	struct boundaries me_boundariesY;
+	struct boundaries me_boundariesUV;
 
-  struct cuda_data cuda_data;
+	struct cuda_data cuda_data;
 };
 
 #endif  /* C63_C63_H_ */
