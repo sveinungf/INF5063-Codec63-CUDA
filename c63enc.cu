@@ -512,6 +512,8 @@ int main(int argc, char **argv)
 	free_c63_enc(cm);
 	free_c63_enc(cm2);
 
+	cleanup_c63_cuda(c63_cuda);
+
 	fclose(outfile);
 	fclose(infile);
 
